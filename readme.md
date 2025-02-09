@@ -1,7 +1,3 @@
-## Disclaimer
-
-This tool is provided for educational and personal use only. The author does not endorse or encourage illegal downloading or distribution of copyrighted content. While streaming content may exist in a legal grey area in some jurisdictions, users are responsible for complying with their local laws and regulations regarding media consumption and copyright.
-
 # Movie Collection Manager
 A Python-based tool that helps you manage movie collections by integrating with TMDB, Real-Debrid, Jellyfin, and Tunarr. Search for movies by keywords, automatically download them through Real-Debrid, organize them in Jellyfin collections, and create 24/7 streaming channels with Tunarr.
 
@@ -17,11 +13,11 @@ A Python-based tool that helps you manage movie collections by integrating with 
 ## Prerequisites
 
 - Python 3.x
-- Jellyfin server
+- [Jellyfin](https://jellyfin.org/) server
 - Real-debrid account
-- Zurg/rclone
+- [Zurg](https://github.com/debridmediamanager/zurg-testing)/[Rclone](https://rclone.org/)
 - Tmdb API key
-- Tunarr server (optional)
+- [Tunarr](https://github.com/chrisbensch/tunarr) server (optional)
 
 ## Installation
 
@@ -83,11 +79,6 @@ python main.py -k "time travel" -m 25
 - Configure channel settings
 - Manage programming schedules
 
-## Error Handling
+## Disclaimer
 
-The script includes robust error handling for:
-- API request failures
-- Rate limiting
-- Missing content
-- Invalid user input
-- Network issues
+This tool is provided for educational and personal use only. The author does not endorse or encourage illegal downloading or distribution of copyrighted content. While streaming content may exist in a legal grey area in some jurisdictions, users are responsible for complying with their local laws and regulations regarding media consumption and copyright.
