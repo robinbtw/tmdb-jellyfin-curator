@@ -3,10 +3,14 @@ import uuid
 import time
 import random
 import argparse
+import os
+from dotenv import load_dotenv
 from utils.torrent import search_1337x, add_magnet_to_debrid, start_magnet_in_debrid
 from utils.jellyfin import create_jellyfin_collection, add_item_to_collection, get_jellyfin_item, do_library_scan
 
-TMDB_API_KEY = ""  # Replace with your actual TMDB API key
+load_dotenv()
+
+TMDB_API_KEY = os.getenv('TMDB_API_KEY')
 TMDB_API_URL = "https://api.themoviedb.org/3"
 TUNARR_API_URL = "http://localhost:8000/api"  # Adjust this to your Tunarr server URL
 
@@ -286,16 +290,17 @@ if __name__ == "__main__":
 
             if input(f"\nWould you like to add movies to real-debrid? ({len(movies)}) (y/n): ").lower() == 'y':
 
-                for movie in movies:
+                for i, movie in enumerate(movies):
                     torrent = search_1337x(movie.get('title') + " " + movie.get('release_date')[:4])
                     if torrent:
                         response, id = add_magnet_to_debrid(torrent['magnet'])
                         if response:
                             start_magnet_in_debrid(id)
-                            print(f"- {movie.get('title')} (Id: {movie.get('id')} to real-debrid!)")
+                            print(f"- {movie.get('title')} (Id: {movie.get('id')} to real-debrid! ({i}))")
                     else:
                         # TODO: scrape a different site for the torrent
                         print(f"Failed to find torrent for {movie.get('title')}")   
+
 
                 seconds = 20
                 for i in range(seconds):
@@ -317,14 +322,16 @@ if __name__ == "__main__":
                 if not group_id:
                     group_id = create_jellyfin_collection(title)
 
-                for movie in movies:
-                    item_id, year = get_jellyfin_item(movie.get('title'))
+                for i, movie in enumerate(movies):
+                    item_id = get_jellyfin_item(movie.get('title'))
 
                     if item_id:
                         add_item_to_collection(group_id, item_id)
-                        print(f"- { movie.get('title') } ({year}) (Id: {item_id} added!)")
+                        print(f"- { movie.get('title') } ({movie.get('release_date')[:4]}) (Id: {item_id} added ({i})!)")
                         #add_movie_to_channel(movie, item_id)
         else:
             print(f"No movies found with keyword '{keyword}'.")
     else:
+
+
         print(f"Keyword '{keyword}' not found.")

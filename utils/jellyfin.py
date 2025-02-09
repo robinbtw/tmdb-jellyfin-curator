@@ -1,15 +1,18 @@
 import json
 import requests
 import os
+from dotenv import load_dotenv
 
-JELLYFIN_SERVER = "http://localhost:8096"  # Replace with your Jellyfin server address
-JELLYFIN_API_KEY = ""  # Replace with your Jellyfin API key
-MOVIE_LIBRARY_ID = "" # Replace with your Movie Library ID. You can find this in the Jellyfin web interface.
-TMDB_API_KEY = ""  # Replace with your TMDb API key
+load_dotenv()
 
+# --- Configuration ---
+JELLYFIN_SERVER = os.getenv('JELLYFIN_SERVER')
+JELLYFIN_API_KEY = os.getenv('JELLYFIN_API_KEY')
+MOVIE_LIBRARY_ID = os.getenv('MOVIE_LIBRARY_ID')
+TMDB_API_KEY = os.getenv('TMDB_API_KEY')
+
+# --- Helper Functions ---
 def do_library_scan():
-
-    # TODO: figure out what this hash/request is: 7738148ffcd07979c7ceb148e06b3aed | replace it with yours (soon)
     """Performs a library scan on the Jellyfin server."""
     url = f"{JELLYFIN_SERVER}/ScheduledTasks/Running/7738148ffcd07979c7ceb148e06b3aed"
     headers = {"Authorization": "Mediabrowser Token=" + JELLYFIN_API_KEY }
@@ -26,9 +29,9 @@ def get_jellyfin_item(movie_name):
     response.raise_for_status()  # Raise an exception for bad status codes
     items = response.json()["Items"]
     if items:
-        return items[0]["Id"], items[0]["ProductionYear"] 
+        return items[0]["Id"] 
     else:
-        return None, None
+        return None
 
 def get_tmdb_keywords(tmdb_id):
     """Retrieves keywords from TMDb for the given TMDb ID."""
