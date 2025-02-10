@@ -12,9 +12,22 @@ MOVIE_LIBRARY_ID = os.getenv('MOVIE_LIBRARY_ID')
 TMDB_API_KEY = os.getenv('TMDB_API_KEY')
 
 # --- Helper Functions ---
+def get_library_scan_task_id():
+    """Gets the task scheduler ID for library scanning."""
+    url = f"{JELLYFIN_SERVER}/ScheduledTasks"
+    headers = {"Authorization": "Mediabrowser Token=" + JELLYFIN_API_KEY}
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+    tasks = response.json()
+    
+    for task in tasks:
+        if task.get("Key") == "RefreshLibrary":
+            return task["Id"]
+    return None
+
 def do_library_scan():
     """Performs a library scan on the Jellyfin server."""
-    url = f"{JELLYFIN_SERVER}/ScheduledTasks/Running/7738148ffcd07979c7ceb148e06b3aed"
+    url = f"{JELLYFIN_SERVER}/ScheduledTasks/Running/{get_library_scan_task_id()}"
     headers = {"Authorization": "Mediabrowser Token=" + JELLYFIN_API_KEY }
     response = requests.post(url, headers=headers)
     response.raise_for_status()
