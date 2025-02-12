@@ -1,19 +1,37 @@
-import requests
+# Standard library imports
+import os
 import uuid
 import time
 import random
 import argparse
-import os
+import concurrent.futures
+
+# Third-party imports
+import requests
 from dotenv import load_dotenv
-from utils.torrent import search_1337x, add_magnet_to_debrid, start_magnet_in_debrid
-from utils.jellyfin import create_jellyfin_collection, add_item_to_collection, get_jellyfin_item, do_library_scan
+
+# Local imports
+from utils.torrent import (
+    search_1337x,
+    add_magnet_to_debrid,
+    start_magnet_in_debrid
+)
+
+# Jellyfin imports
+from utils.jellyfin import (
+    create_jellyfin_collection,
+    add_item_to_collection,
+    get_jellyfin_item,
+    do_library_scan
+)
 
 load_dotenv()
 
 TMDB_API_KEY = os.getenv('TMDB_API_KEY')
 TMDB_API_URL = "https://api.themoviedb.org/3"
-TUNARR_API_URL = "http://localhost:8000/api"  # Adjust this to your Tunarr server URL
+TUNARR_API_URL = os.getenv('TUNARR_SERVER') + "/api" 
 
+# Generic keywords that are more likely to return good results
 generic_keywords = [
     "horror", "action", "comedy", 
     "drama", "adventure", "fantasy",
@@ -21,10 +39,11 @@ generic_keywords = [
     "animation", "documentary", "family", "horror", "western", "war",
     "history", "biography", "sport", "reality", "game"]
 
+# Specific keywords that are more likely to return good results
 specific_keywords  = [
-    "antihero", "mutant", "superhero", 
-    "mcu", "dcu", "live action", "animated",
-    "video game"]
+    "antihero", "female protagonist", "superhero", 
+    "mcu", "disaster", "live action", "based on young adult novel",
+    "based on video game"]
 
 # Search for a keyword in the TMDB API and let user select from matching results.
 def search_keyword_id(keyword, title="Unknown"):
@@ -106,8 +125,15 @@ def get_movies_by_keyword(keyword_id, max_results):
         return sorted(results, key=lambda x: x.get('vote_average', 0), reverse=True)
     except requests.exceptions.RequestException as e:
         print(f"TMDB API error: {e}")
-        return []
 
+        return []
+    
+def waiting_animation_dots(message="Processing", delay=0.3, iterations=3):
+
+    for i in range(iterations):
+        dots = "." * (i + 1)
+        print(f"\r{message}{dots}", end="", flush=True)
+        time.sleep(delay)
 
 # Get detailed information about a specific movie.
 def get_movie_details(movie_id):
@@ -132,206 +158,97 @@ def get_movie_certification(movie):
     response = requests.get(endpoint, params=params)
     response.raise_for_status()
     return response.json()["results"]["certification"]
-
-# TODO: broken
-def add_movie_to_channel(movie, jellyfin_movie_id):
-    id = str(uuid.uuid4())
-
-    program_data = {
-        "type": "manual",
-        "programs": {
-            f"{id}": {
-                "persisted": True,
-                "uniqueId": f"{id}",
-                "summary": f"{movie.get('overview')}",
-                "date": f"{movie.get('release_date')}T00:00:00.0000000Z",
-                "rating": str(get_movie_certification(movie)),
-                "title": f"{movie.get('title')}",
-                "duration": 1,
-                "type": "content",
-                "id": id,
-                "subtype": "movie",
-                "externalIds": [
-                    {
-                        "type": "multi",
-                        "source": "jellyfin",
-                        "sourceId": "Jellyfin",
-                        "id": f"{jellyfin_movie_id}"
-                    },                            
-                    {
-                        "type": "single",
-                        "source": "tmdb",
-                        "id": f"{movie.get('id')}"
-                    },
-                    {
-                        "type": "single",
-                        "source": "imdb",
-                        "id": f"{movie.get('imdb_id')}"
-                    }
-
-                ],
-                "externalKey" : f"{jellyfin_movie_id}",
-                "externalSourceId": "Jellyfin",
-                "externalSourceName": "Jellyfin",
-                "externalSourceType": "jellyfin"
-            }
-        },
-
-        "lineup": [
-            {
-                "persisted": True,
-                "type": "content",
-                "id": id,
-                "duration": 1,
-            }
-        ]
-    }
-
-    #send program data to tunarr
-    headers = { "Content-Type": "application/json" }
-    response = requests.post(f"{TUNARR_API_URL}/channels/{id}/programming", json=program_data, headers=headers)
-    response.raise_for_status()
-    return response.json()    
-
-# Create a Tunarr channel with the found movies.
-def create_tunarr_channel(title):
-
-    id = str(uuid.uuid4())
-    endpoint = f"{TUNARR_API_URL}/channels"
     
-    # Prepare the channel configuration
-    channel_data = {
-        "disableFillerOverlay": False,
-        "duration": 0, # 24 hours in seconds
-        "fillerCollections": [],
-        "fillerRepeatCooldown": 30000,
-        "groupTitle": f"Movies",
-        "guideMinimumDuration": 30000, # 5 minutes
-        "icon": {
-            "duration": 0,
-            "path": "",
-            "position": "bottom-right",
-            "width": 0
-        },
-        "id": id,
-        "name": f"24/7 {title.upper()}",
-        "number": len(requests.get(f"{TUNARR_API_URL}/channels").json()) + 1,
-        "offline": {
-            "mode": "pic" ,
-            "picture": "",
-            "soundtrack": ""
-        },
-        "onDemand": { "enabled": False },
-        "programCount": 0,
-        "startTime": int(round(time.time() * 1000)),
-        "stealth": False,
-        "streamMode": "hls",
 
-        "transcoding": {
-            "targetResolution": "global",
-            "videoBitrate": "global",
-            "videoBufferSize": "global"
-        },
+def process_movie_parallel(movie):
+    """Process a single movie in parallel - handles torrent search and magnet addition"""
+    title = movie.get('title')
+    year = movie.get('release_date')[:4]
+    search_term = f"{title} {year}"
+    
+    print(f"Processing: {search_term}")
+    torrent = search_1337x(search_term)
+    
+    if torrent:
+        response, id = add_magnet_to_debrid(torrent['magnet'])
+        if response:
+            start_magnet_in_debrid(id)
+            print(f"✓ {title} ({year}) added to real-debrid!")
+            return True
+    print(f"✗ Failed to process {title}")
+    return False
 
-        "watermark": { 
-            "animated": False,
-            "duration": 0,
-            "enabled": False, 
-            "fixedSize": False,
-            "horizontalMargin": 1,
-            "opacity": 100,
-            "position": "bottom-right",
-            "url": "", 
-            "verticalMargin": 1,
-            "width": 10
-        },
-
-        "transcodeConfigId": "db1e3de8-6896-47b1-9c13-ca6309a191ea" #x265
-    }
+def add_movie_to_collection_parallel(movie, group_id):
+    """Add a single movie to Jellyfin collection in parallel"""
+    title = movie.get('title')
+    year = movie.get('release_date')[:4]
     
-    headers = { "Content-Type": "application/json" }
-    
-    try:
-        response = requests.post(endpoint, json=channel_data, headers=headers)  
-        response.raise_for_status()
-        print(f"\nSuccessfully created Tunarr channel '{channel_data['name']}'")
-        return response.json(), id
-    except requests.exceptions.RequestException as e:
-        print(f"Tunarr API error: {e}")
-        return None
-    
+    item_id = get_jellyfin_item(title)
+    if item_id:
+        add_item_to_collection(group_id, item_id)
+        print(f"✓ {title} ({year}) added to collection!")
+        return True
+    print(f"✗ Failed to add {title} to collection")
+    return False
 
 if __name__ == "__main__":
     print("Starting...")
 
     # Set up argument parser
-    parser = argparse.ArgumentParser(description='Search and process movies by keyword')
+    parser = argparse.ArgumentParser(description='Search and process movies by keyword or person')
     parser.add_argument('--keyword', '-k', type=str, help='Keyword to search for (use quotes for multiple words)')
     parser.add_argument('--max-results', '-m', type=int, default=50, help='Maximum number of movies to process')
+    parser.add_argument('--workers', '-w', type=int, default=5, help='Number of parallel workers')
     args = parser.parse_args()
 
-    # Get keyword from command line or prompt
     keyword = args.keyword if args.keyword else input("Enter a keyword to search for: ")
     keyword_id, title = search_keyword_id(keyword)
-    group_id = None
 
     if keyword_id:
         movies = get_movies_by_keyword(keyword_id, args.max_results)
-        if movies:
-            print(f"\nSelected keyword '{title.lower()}'")
-                    
-            # Create Tunarr channel with keyword
-            if input("\nCreate a Tunarr channel with this keyword? (y/n): ").lower() == 'y':
-                result = create_tunarr_channel(title)
 
-            if input("\nCreate a jellyfin collection with this keyword? (y/n): ").lower() == 'y':              
-               # Create a jellyfin collection with the keyword
-                group_id =create_jellyfin_collection(title)
+    group_id = None
+    if movies:
 
-            if input(f"\nWould you like to add movies to real-debrid? ({len(movies)}) (y/n): ").lower() == 'y':
+        if input("\nCreate a jellyfin collection with this collection? (y/n): ").lower() == 'y':              
+           # Create a jellyfin collection with the keyword
+            group_id = create_jellyfin_collection(title)
 
-                for i, movie in enumerate(movies):
-                    torrent = search_1337x(movie.get('title') + " " + movie.get('release_date')[:4])
-                    if torrent:
-                        response, id = add_magnet_to_debrid(torrent['magnet'])
-                        if response:
-                            start_magnet_in_debrid(id)
-                            print(f"- {movie.get('title')} (Id: {movie.get('id')} to real-debrid! ({i}))")
-                    else:
-                        # TODO: scrape a different site for the torrent
-                        print(f"Failed to find torrent for {movie.get('title')}")   
+        if input(f"\nWould you like to add movies to real-debrid? ({len(movies)}) (y/n): ").lower() == 'y':
+            # Process movies in parallel using ThreadPoolExecutor
+            with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
+                futures = [executor.submit(process_movie_parallel, movie) for movie in movies]
+                
+                # Wait for all tasks to complete
+                concurrent.futures.wait(futures)
+                successful = sum(1 for future in futures if future.result())
+                print(f"\nProcessed {successful}/{len(movies)} movies successfully")
 
+            # Wait for zurg to reload
+            for i in range(30):
+                waiting_animation_dots(f"Wait for zurg reload... {i+1}/30")
 
-                seconds = 20
-                for i in range(seconds):
-                    print(f"Wait for zurg reload... {i+1}/{seconds}")
-                    time.sleep(1)
+        if input("\nWould you like to add movies to a collection? (y/n): ").lower() == 'y':
 
-            if input("\nWould you like to add movies to a collection? (y/n): ").lower() == 'y':
+            # Do a library scan to ensure the movies are added to the library
+            do_library_scan()   
 
-                # Do a library scan to ensure the movies are added to the library
-                do_library_scan()   
+            # wait for the library to update
+            for i in range(15):
+                waiting_animation_dots(f"Waiting for library to update... {i+1}/15")
+                
+            # Create a jellyfin collection with the keyword if not already created
+            if not group_id:
+                group_id = create_jellyfin_collection(title)
 
-                seconds = 15
-                # wait for the library to update
-                for i in range(seconds):
-                    print(f"Waiting for library to update... {i+1}/{seconds}")
-                    time.sleep(1)
-                    
-               # Create a jellyfin collection with the keyword
-                if not group_id:
-                    group_id = create_jellyfin_collection(title)
+            # Add movies to collection in parallel
+            with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
+                futures = [executor.submit(add_movie_to_collection_parallel, movie, group_id) for movie in movies]
+                
+                # Wait for all tasks to complete
+                concurrent.futures.wait(futures)
+                successful = sum(1 for future in futures if future.result())
+                print(f"\nAdded {successful}/{len(movies)} movies to collection successfully")
 
-                for i, movie in enumerate(movies):
-                    item_id = get_jellyfin_item(movie.get('title'))
-
-                    if item_id:
-                        add_item_to_collection(group_id, item_id)
-                        print(f"- { movie.get('title') } ({movie.get('release_date')[:4]}) (Id: {item_id} added ({i})!)")
-                        #add_movie_to_channel(movie, item_id)
-        else:
-            print(f"No movies found with keyword '{keyword}'.")
     else:
-
-
-        print(f"Keyword '{keyword}' not found.")
+        print("No movies found with the keyword.")
