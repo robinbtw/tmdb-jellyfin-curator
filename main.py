@@ -28,7 +28,7 @@ from utils.jellyfin import (
 load_dotenv()
 
 TMDB_API_KEY = os.getenv('TMDB_API_KEY')
-TMDB_API_URL = "https://api.themoviedb.org/3"
+TMDB_API_URL = os.getenv('TMDB_API_URL')
 TUNARR_API_URL = os.getenv('TUNARR_SERVER') + "/api" 
 
 # Generic keywords that are more likely to return good results

@@ -7,11 +7,11 @@ load_dotenv()
 # --- Jellyfin ---
 JELLYFIN_SERVER = os.getenv('JELLYFIN_SERVER')
 JELLYFIN_API_KEY = os.getenv('JELLYFIN_API_KEY')
-MOVIES_LIBRARY_ID = os.getenv('MOVIE_LIBRARY_ID')
+JELLYFIN_MOVIES_LIBRARY_ID = os.getenv('JELLYFIN_MOVIE_LIBRARY_ID')
 
 # --- TMDB ---
 TMDB_API_KEY = os.getenv('TMDB_API_KEY')
-TMDB_API_URL = "https://api.themoviedb.org/3"
+TMDB_API_URL = os.getenv('TMDB_API_URL')
 
 # --- Helper Functions ---
 def get_library_scan_task_id():
@@ -46,7 +46,7 @@ def do_library_scan():
 
 def get_jellyfin_item(movie_name):
     """Retrieves item ID for a movie by name from the Jellyfin movies library."""
-    url = f"{JELLYFIN_SERVER}/Items?parentId={MOVIES_LIBRARY_ID}&recursive=true&searchTerm={movie_name}"
+    url = f"{JELLYFIN_SERVER}/Items?parentId={JELLYFIN_MOVIES_LIBRARY_ID}&recursive=true&searchTerm={movie_name}"
     headers = {"Authorization": "Mediabrowser Token=" + JELLYFIN_API_KEY }
     response = requests.get(url, headers=headers)
     response.raise_for_status()
