@@ -45,9 +45,8 @@ specific_keywords  = [
     "mcu", "disaster", "live action", "based on young adult novel",
     "based on video game"]
 
-# Search for a keyword in the TMDB API and let user select from matching results.
 def search_keyword_id(keyword, title="Unknown"):
-
+    """Search for a keyword and return the ID."""
     # Construct the API endpoint and parameters
     endpoint = f"{TMDB_API_URL}/search/keyword"
     params = {
@@ -88,9 +87,8 @@ def search_keyword_id(keyword, title="Unknown"):
         print(f"TMDB API error: {e}")
         return None
 
-# Get movies that have the specified keyword ID.
 def get_movies_by_keyword(keyword_id, max_results):
-
+    """Get movies by keyword from the TMDB API."""
     endpoint = f"{TMDB_API_URL}/keyword/{keyword_id}/movies"
     params = {
         "api_key": TMDB_API_KEY,
@@ -129,15 +127,14 @@ def get_movies_by_keyword(keyword_id, max_results):
         return []
     
 def waiting_animation_dots(message="Processing", delay=0.3, iterations=3):
-
+    """Display a waiting animation with dots."""
     for i in range(iterations):
         dots = "." * (i + 1)
         print(f"\r{message}{dots}", end="", flush=True)
         time.sleep(delay)
 
-# Get detailed information about a specific movie.
 def get_movie_details(movie_id):
-
+    """Get detailed information about a specific movie."""
     endpoint = f"{TMDB_API_URL}/movie/{movie_id}"
     params = {
         "api_key": TMDB_API_KEY,
@@ -151,6 +148,7 @@ def get_movie_details(movie_id):
         return None
     
 def get_movie_certification(movie):
+    """Get the certification for a specific movie."""
     endpoint = f"{TMDB_API_URL}/movie/{movie.get('id')}/release_dates"
     params = {
         "api_key": TMDB_API_KEY,
