@@ -16,82 +16,130 @@ TMDB_API_URL = os.getenv('TMDB_API_URL')
 # --- Helper Functions ---
 def get_library_scan_task_id():
     """Gets the task scheduler ID for library scanning."""
-
-    print("Getting library scan task ID...")
-    url = f"{JELLYFIN_SERVER}/ScheduledTasks"
-    headers = {"Authorization": "Mediabrowser Token=" + JELLYFIN_API_KEY}
-    response = requests.get(url, headers=headers)
-    response.raise_for_status()
-    tasks = response.json()
-    
-    task_id = None
-    for task in tasks:
-        if task.get("Key") == "RefreshLibrary":
-            task_id = task["Id"]
-            break
-    
-    return task_id
+    try:
+        print("Getting library scan task Id...")
+        url = f"{JELLYFIN_SERVER}/ScheduledTasks"
+        headers = {"Authorization": "Mediabrowser Token=" + JELLYFIN_API_KEY}
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        tasks = response.json()
+        
+        task_id = None
+        for task in tasks:
+            if task.get("Key") == "RefreshLibrary":
+                task_id = task["Id"]
+                break
+        
+        return task_id
+    except requests.exceptions.RequestException as e:
+        print(f"✗ Failed to get library scan task Id: {e}")
+        return None
 
 def do_library_scan():
     """Performs a library scan on the Jellyfin server."""
-    task_id = get_library_scan_task_id()
-    
-    if task_id:
-        url = f"{JELLYFIN_SERVER}/ScheduledTasks/Running/{task_id}"
-        headers = {"Authorization": "Mediabrowser Token=" + JELLYFIN_API_KEY }
-        response = requests.post(url, headers=headers)
-        response.raise_for_status()
-        if response.status_code == 204:
-            print("Starting library scan...")
+    try:
+        task_id = get_library_scan_task_id()
+        
+        if task_id:
+            url = f"{JELLYFIN_SERVER}/ScheduledTasks/Running/{task_id}"
+            headers = {"Authorization": "Mediabrowser Token=" + JELLYFIN_API_KEY }
+            response = requests.post(url, headers=headers)
+            response.raise_for_status()
+            if response.status_code == 204:
+                print("Starting library scan...")
+    except requests.exceptions.RequestException as e:
+        print(f"✗ Failed to perform library scan: {e}")
 
-def get_jellyfin_item(movie_name):
+def get_jellyfin_movie(movie_name):
     """Retrieves item ID for a movie by name from the Jellyfin movies library."""
-    url = f"{JELLYFIN_SERVER}/Items?parentId={JELLYFIN_MOVIES_LIBRARY_ID}&recursive=true&searchTerm={movie_name}"
-    headers = {"Authorization": "Mediabrowser Token=" + JELLYFIN_API_KEY }
-    response = requests.get(url, headers=headers)
-    response.raise_for_status()
-    items = response.json()["Items"]
-    return items[0]["Id"] if items else None
+    try:
+        url = f"{JELLYFIN_SERVER}/Items?includeItemTypes=Movie&recursive=true&searchTerm={movie_name}"
+        headers = {"Authorization": "Mediabrowser Token=" + JELLYFIN_API_KEY}
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
 
-def get_tmdb_keywords(tmdb_id):
-    """Retrieves keywords from TMDb for the given TMDb ID."""
-    url = f"{TMDB_API_URL}/movie/{tmdb_id}/keywords?api_key={TMDB_API_KEY}"
-    response = requests.get(url)
-    response.raise_for_status()
-    data = response.json()
-    keywords = []
-    if 'keywords' in data and 'keywords' in data['keywords']:
-
-        keywords = [keyword['name'] for keyword in data['keywords']]
-    return keywords
+        items = response.json().get("Items", [])        
+        if items:
+            # Try exact match first
+            for item in items:
+                if item["Name"].lower() == movie_name.lower():
+                    return item["Id"]
+        return None
+    except requests.exceptions.RequestException as e:
+        print(f"✗ Failed to retrieve item for movie {movie_name}: {e}")
+        return None
 
 def create_jellyfin_collection(collection_name):
     """Creates a new collection in Jellyfin if it doesn't already exist."""
-    print("Creating jellyfin collection...")
-    url = f"{JELLYFIN_SERVER}/Collections?Name={collection_name}"
-    headers = {"Authorization": "Mediabrowser Token=" + JELLYFIN_API_KEY }
+    try:
+        collection = get_jellyfin_collection(collection_name)
+        if collection:
+            print(f"Collection {collection_name} already exists lets use it.")
+            return collection
 
-    response = requests.post(url, headers=headers)
-    response.raise_for_status()
-    collection_id = response.json()["Id"]
-    return collection_id
+        print("Creating jellyfin collection...")
+        url = f"{JELLYFIN_SERVER}/Collections?Name={collection_name}"
+        headers = {"Authorization": "Mediabrowser Token=" + JELLYFIN_API_KEY }
 
-def add_item_to_collection(collection_id, item_id):
-    """Adds an item to a Jellyfin collection."""
-    url = f"{JELLYFIN_SERVER}/Collections/{collection_id}/Items?ids={item_id}"
-    headers = {"Authorization": "Mediabrowser Token=" + JELLYFIN_API_KEY }
+        response = requests.post(url, headers=headers)
+        response.raise_for_status()
 
-    response = requests.post(url, headers=headers)
-    response.raise_for_status()
+        return response.json()["Id"]
+    except requests.exceptions.RequestException as e:
+        print(f"✗ Failed to create collection {collection_name}: {e}")
+        return None
 
-def find_tmdb_id(jellyfin_item):
-    """Tries to find the TMDb ID from a Jellyfin item's provider IDs."""
-    tmdb_id = None
+def get_jellyfin_collection(collection_name):
+    """Retrieves a Jellyfin collection by name."""
+    try:
+        url = f"{JELLYFIN_SERVER}/Items?recursive=true&includeItemTypes=BoxSet&searchTerm={collection_name}"
+        headers = {"Authorization": "Mediabrowser Token=" + JELLYFIN_API_KEY}
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+
+        items = response.json().get("Items", [])
+        if items:
+            for item in items:
+                if item["Name"].lower() == collection_name.lower():
+                    return item["Id"]   
+                       
+        return None
+    except requests.exceptions.RequestException as e:
+        print(f"✗ Failed to retrieve collection {collection_name}: {e}")
+        return None
     
-    if 'ProviderIds' in jellyfin_item and jellyfin_item['ProviderIds']:
-        for provider, id_value in jellyfin_item['ProviderIds'].items():
-            if provider.lower() == "tmdb":
-                tmdb_id = int(id_value)
-                break
-    
-    return tmdb_id
+def is_movie_in_collection(name, collection_id):
+    """Checks if a movie is already in a Jellyfin collection."""
+    try:
+        url = f"{JELLYFIN_SERVER}/Items?parentId={collection_id}&recursive=true&includeItemTypes=Movie&searchTerm={name}"
+        headers = {"Authorization": "Mediabrowser Token=" + JELLYFIN_API_KEY }
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+
+        items = response.json().get("Items", [])
+        if items:
+            for item in items:
+                if item["Name"].lower() == name.lower():
+                    return item["Id"]
+        
+    except requests.exceptions.RequestException as e:
+        print(f"✗ Failed to check if movie {name} is in collection: {e}")
+    return None
+
+def add_movie_to_collection(collection_id, movie_id):
+    """Adds a movie to a Jellyfin collection."""
+    try:
+        if is_movie_in_collection(movie_id, collection_id):       
+            return True
+        
+        url = f"{JELLYFIN_SERVER}/Collections/{collection_id}/Items?ids={movie_id}"
+        headers = {"Authorization": "Mediabrowser Token=" + JELLYFIN_API_KEY }
+        response = requests.post(url, headers=headers)
+        response.raise_for_status()
+
+        if response.status_code == 204:
+            return True
+        return False
+    except requests.exceptions.RequestException as e:
+        print(f"✗ Failed to add item {movie_id} to collection {collection_id}: {e}")
+        return False

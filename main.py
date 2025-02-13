@@ -20,8 +20,8 @@ from utils.torrent import (
 # Jellyfin imports
 from utils.jellyfin import (
     create_jellyfin_collection,
-    add_item_to_collection,
-    get_jellyfin_item,
+    add_movie_to_collection,
+    get_jellyfin_movie,
     do_library_scan
 )
 
@@ -163,8 +163,7 @@ def get_movie_certification(movie):
 def process_movie_parallel(movie):
     """Process a single movie in parallel - handles torrent search and magnet addition"""
     title = movie.get('title')
-    year = movie.get('release_date')[:4]
-    search_term = f"{title} {year}"
+    search_term = f"{title} {movie.get('release_date')[:4]}"
     
     print(f"Processing: {search_term}")
     torrent = search_1337x(search_term)
@@ -173,7 +172,7 @@ def process_movie_parallel(movie):
         response, id = add_magnet_to_debrid(torrent['magnet'])
         if response:
             start_magnet_in_debrid(id)
-            print(f"✓ {title} ({year}) added to real-debrid!")
+            print(f"✓ {title} ({movie.get('release_date')[:4]}) is now in real-debrid!")
             return True
     print(f"✗ Failed to process {title}")
     return False
@@ -182,10 +181,10 @@ def add_movie_to_collection_parallel(movie, group_id):
     """Add a single movie to Jellyfin collection in parallel"""
     title = movie.get('title')
     year = movie.get('release_date')[:4]
+    item_id = get_jellyfin_movie(title)
     
-    item_id = get_jellyfin_item(title)
     if item_id:
-        add_item_to_collection(group_id, item_id)
+        add_movie_to_collection(group_id, item_id)
         print(f"✓ {title} ({year}) added to collection!")
         return True
     print(f"✗ Failed to add {title} to collection")

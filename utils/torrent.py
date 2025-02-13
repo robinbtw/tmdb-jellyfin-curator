@@ -31,12 +31,39 @@ def make_request(url, method="get", headers=None, data=None, timeout=10):
     except requests.RequestException as e:
         print(f"✗ Request failed: {e}")
         return None
+    
+def extract_hash_from_magnet(magnet):
+    """Extract hash from magnet link."""
+    hash_match = re.search(r'btih:([a-fA-F0-9]{40})', magnet)
+    if hash_match:
+        return hash_match.group(1).lower()
+    return None    
 
 def add_magnet_to_debrid(magnet):
     """Add magnet to Debrid."""
     url = "https://api.real-debrid.com/rest/1.0/torrents/addMagnet"
 
     try:
+        # Extract hash from magnet link
+        magnet_hash = extract_hash_from_magnet(magnet)
+        if not magnet_hash:
+            print("✗ Invalid magnet link - could not extract hash")
+            return None, None
+
+        # Check if torrent exists in Debrid
+        endpoint = "https://api.real-debrid.com/rest/1.0/torrents"
+        response = requests.get(endpoint, headers=HEADERS)
+        response.raise_for_status()
+
+        torrents = response.json()
+        if torrents:
+            for torrent in torrents:
+                # Compare hashes (case-insensitive)
+                if torrent.get('hash', '').lower() == magnet_hash:
+                    print(f"! Torrent already exists in real-debrid (Id: {torrent.get('id')})")
+                    return torrent, torrent.get('id')
+
+        # If not found, add the new magnet
         response = make_request(url, method="post", headers=HEADERS, data={"magnet": magnet}, timeout=3)
         if response and response.status_code in [200, 201]:
             result = response.json()
