@@ -77,6 +77,7 @@ def create_jellyfin_collection(collection_name):
             print(f"Collection {collection_name} already exists lets use it.")
             return collection
 
+        print("") # Add a new line
         print("Creating jellyfin collection...")
         url = f"{JELLYFIN_SERVER}/Collections?Name={collection_name}"
         headers = {"Authorization": "Mediabrowser Token=" + JELLYFIN_API_KEY }

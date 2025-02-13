@@ -1,3 +1,9 @@
+[![Python](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Jellyfin](https://img.shields.io/badge/jellyfin-compatible-00A4DC)](https://jellyfin.org/)
+[![Real-Debrid](https://img.shields.io/badge/Real--Debrid-API-red)](https://real-debrid.com/)
+[![TMDB](https://img.shields.io/badge/TMDB-API-01B4E4)](https://www.themoviedb.org/)
+
 # Automated Movie Collection Manager
 
 A Python-based automation tool that helps manage movie collections by integrating TMDB, Real-Debrid, and Jellyfin. Search for movies by keywords, automatically send them to Real-Debrid, and organize them into Jellyfin collections.

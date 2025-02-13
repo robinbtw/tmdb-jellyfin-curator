@@ -196,7 +196,7 @@ if __name__ == "__main__":
     # Set up argument parser
     parser = argparse.ArgumentParser(description='Search and process movies by keyword or person')
     parser.add_argument('--keyword', '-k', type=str, help='Keyword to search for (use quotes for multiple words)')
-    parser.add_argument('--max-results', '-m', type=int, default=30, help='Maximum number of movies to process')
+    parser.add_argument('--max-results', '-m', type=int, default=50, help='Maximum number of movies to process')
     
     # Warning: Increasing workers may cause rate limiting on some APIs
     parser.add_argument('--workers', '-w', type=int, default=1, help='Number of parallel workers')

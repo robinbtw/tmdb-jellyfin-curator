@@ -71,7 +71,6 @@ class SiteNyaa(TorrentSite):
 
             if potential_torrents:
                 best_torrent = sorted(potential_torrents, reverse=True)[0]
-                print(best_torrent)
                 magnet = self.get_magnet_link(best_torrent[1])
                 if magnet:
                     return TorrentResult(
@@ -83,6 +82,7 @@ class SiteNyaa(TorrentSite):
         except Exception as e:
             print(f"✗ Error searching Nyaa: {e}")
 
+        print("✗ No torrents found on Nyaa")
         return None
 
 class Site1337x(TorrentSite):
@@ -132,6 +132,7 @@ class Site1337x(TorrentSite):
         except Exception as e:
             print(f"✗ Error searching 1337x: {e}")
         
+        print("✗ No torrents found on 1337x")
         return None
 
 class SiteYTS(TorrentSite):
@@ -195,5 +196,5 @@ class SiteYTS(TorrentSite):
                             source="YTS"
                         )
         
-        print("✗ No matching 1080p torrents found on YTS")     
+        print("✗ No torrents found on YTS")     
         return None
