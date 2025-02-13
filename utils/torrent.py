@@ -77,67 +77,18 @@ def get_magnet_link(torrent_url):
     magnet_link = soup.find('a', href=re.compile(r'^magnet:'))['href']
     return magnet_link
 
-def search_1337x(title):
-    """Search 1337x for a torrent."""
-    print(f"Searching for {title} on 1337x")
-    search_query = title.replace(' ', '+')
-
-    # Use HTTPS and the main domain
-    domain = "https://1337x.to"
-    url = f"{domain}/search/{search_query}/1/"
-
-    try:
-        response = requests.get(url=url, headers=HEADERS)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, 'html.parser')
-
-        # Find the table containing torrents
-        tbody = soup.find('tbody')
-        if not tbody:
-            print(f"✗ No results found for {title} on 1337x")
-            return None
-
-        torrent_rows = tbody.find_all('tr')
-        if not torrent_rows:
-            print("✗ No torrent rows found")
-            return None
-
-        # First filter and sort by seeders before getting magnet links
-        potential_torrents = []
-
-        for row in torrent_rows[:10]:  # Check first 10 results
-            try:
-                name = row.find_all('td')[0].find_all('a')[-1].text
-                seeders = int(row.find_all('td')[1].text)
-
-                # Check for desired quality and exclude unwanted releases
-                name_lower = name.lower()
-                if (seeders >= 5 and  # Minimum seeders
-                    ("1080p" in name_lower or "bluray" in name_lower) and # Quality check
-                    "sample" not in name_lower and # Exclude samples
-                    "telesync" not in name_lower and "cam" not in name_lower): # Exclude telesyncs and cams
-
-                    torrent_href = domain + row.find_all('td')[0].find_all('a')[-1]['href']
-                    potential_torrents.append((seeders, torrent_href, name))
-            except (IndexError, ValueError) as e:
-                print(f"✗ Error parsing row: {e}")
-                continue
-
-        if potential_torrents:
-            best_torrent = sorted(potential_torrents, reverse=True)[0]
-            magnet = get_magnet_link(best_torrent[1])
-
-            result = {
-                'name': best_torrent[2],
-                'seeders': best_torrent[0],
-                'magnet': magnet
-            }
-            return result
-        else:
-            print("✗ No suitable torrents found")
-
-    except Exception as e:
-        print(f"✗ Error searching 1337x: {e}")
-        return None
-
+def search_torrent(title: str):
+    """Search for a torrent across multiple sites."""
+    from .torrent_manager import TorrentManager
+    
+    manager = TorrentManager()
+    result = manager.search_all(title)
+    
+    if result:
+        return {
+            'name': result.name,
+            'seeders': result.seeders,
+            'magnet': result.magnet,
+            'source': result.source
+        }
     return None

@@ -12,7 +12,6 @@ from dotenv import load_dotenv
 
 # Local imports
 from utils.torrent import (
-    search_1337x,
     add_magnet_to_debrid,
     start_magnet_in_debrid
 )
@@ -160,17 +159,20 @@ def get_movie_certification(movie):
 
 def process_movie_parallel(movie):
     """Process a single movie in parallel - handles torrent search and magnet addition"""
+    from utils.torrent import search_torrent
+
     title = movie.get('title')
-    search_term = f"{title} {movie.get('release_date')[:4]}"
+    release_date = movie.get('release_date')[:4]
+    search_term = f"{title} {release_date}"
     
     print(f"Processing: {search_term}")
-    torrent = search_1337x(search_term)
+    torrent = search_torrent(search_term)
     
     if torrent:
         response, id = add_magnet_to_debrid(torrent['magnet'])
         if response:
             start_magnet_in_debrid(id)
-            print(f"✓ {title} ({movie.get('release_date')[:4]}) is now in real-debrid!")
+            print(f"✓ {title} ({release_date}) is now in real-debrid ({torrent['source']})!")
             return True
     print(f"✗ Failed to process {title}")
     return False
@@ -194,8 +196,10 @@ if __name__ == "__main__":
     # Set up argument parser
     parser = argparse.ArgumentParser(description='Search and process movies by keyword or person')
     parser.add_argument('--keyword', '-k', type=str, help='Keyword to search for (use quotes for multiple words)')
-    parser.add_argument('--max-results', '-m', type=int, default=50, help='Maximum number of movies to process')
-    parser.add_argument('--workers', '-w', type=int, default=5, help='Number of parallel workers')
+    parser.add_argument('--max-results', '-m', type=int, default=30, help='Maximum number of movies to process')
+    
+    # Warning: Increasing workers may cause rate limiting on some APIs
+    parser.add_argument('--workers', '-w', type=int, default=1, help='Number of parallel workers')
     args = parser.parse_args()
 
     keyword = args.keyword if args.keyword else input("Enter a keyword to search for: ")
