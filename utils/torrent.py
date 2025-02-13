@@ -23,6 +23,21 @@ def extract_hash_from_magnet(magnet):
         return hash_match.group(1).lower()
     return None    
 
+def check_for_duplicate_hash(magnet_hash):
+    """Check if a torrent with the given hash already exists in Debrid."""
+    endpoint = "https://api.real-debrid.com/rest/1.0/torrents"
+    response = requests.get(endpoint, headers=HEADERS)
+    response.raise_for_status()
+
+    torrents = response.json()
+    if torrents:
+        for torrent in torrents:
+            # Compare hashes (case-insensitive)
+            if torrent.get('hash', '').lower() == magnet_hash.lower():
+                print(f"! Torrent already exists in real-debrid (Id: {torrent.get('id')})")
+                return True
+    return False
+
 def add_magnet_to_debrid(magnet):
     """Add magnet to Debrid."""
     url = "https://api.real-debrid.com/rest/1.0/torrents/addMagnet"
@@ -31,21 +46,12 @@ def add_magnet_to_debrid(magnet):
         # Extract hash from magnet link
         magnet_hash = extract_hash_from_magnet(magnet)
         if not magnet_hash:
-            print("✗ Invalid magnet link - could not extract hash")
+            print("✗ Invalid magnet link - could not extract hash!")
             return None, None
 
         # Check if torrent exists in Debrid
-        endpoint = "https://api.real-debrid.com/rest/1.0/torrents"
-        response = requests.get(endpoint, headers=HEADERS)
-        response.raise_for_status()
-
-        torrents = response.json()
-        if torrents:
-            for torrent in torrents:
-                # Compare hashes (case-insensitive)
-                if torrent.get('hash', '').lower() == magnet_hash:
-                    print(f"! Torrent already exists in real-debrid (Id: {torrent.get('id')})")
-                    return torrent, torrent.get('id')
+        if check_for_duplicate_hash(magnet_hash):
+            return None, None
 
         # If not found, add the new magnet
         response = requests.post(url, headers=HEADERS, data={"magnet": magnet}, timeout=3)
@@ -53,7 +59,7 @@ def add_magnet_to_debrid(magnet):
             result = response.json()
             return result, result.get('id')
         else:
-            print(f"✗ Failed to add magnet: {response.status_code if response else 'no response'}")
+            print(f"✗ Failed to add magnet: {response.status_code if response else 'no response'}!")
             return None, None
 
     except Exception as e:
