@@ -42,29 +42,35 @@ def add_magnet_to_debrid(magnet):
     """Add magnet to Debrid."""
     url = "https://api.real-debrid.com/rest/1.0/torrents/addMagnet"
 
-    try:
-        # Extract hash from magnet link
-        magnet_hash = extract_hash_from_magnet(magnet)
-        if not magnet_hash:
-            print("✗ Invalid magnet link - could not extract hash!")
-            return None, None
-
-        # Check if torrent exists in Debrid
-        if check_for_duplicate_hash(magnet_hash):
-            return None, None
-
-        # If not found, add the new magnet
-        response = requests.post(url, headers=HEADERS, data={"magnet": magnet}, timeout=3)
-        if response and response.status_code in [200, 201]:
-            result = response.json()
-            return result, result.get('id')
-        else:
-            print(f"✗ Failed to add magnet: {response.status_code if response else 'no response'}!")
-            return None, None
-
-    except Exception as e:
-        print(f"✗ No response from debrid for adding magnet: {e}")
+    # Extract hash from magnet link
+    magnet_hash = extract_hash_from_magnet(magnet)
+    if not magnet_hash:
+        print("✗ Invalid magnet link - could not extract hash!")
         return None, None
+
+    # Check if torrent exists in Debrid
+    if check_for_duplicate_hash(magnet_hash):
+        return None, None
+
+    # If not found, add the new magnet
+    try:
+        response = requests.post(url, headers=HEADERS, data={"magnet": magnet}, timeout=3)
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as http_err:
+        if response.status_code == 503:
+            print("✗ Service unavailable (503). Please try again later.")
+        else:
+            print(f"✗ HTTP error occurred: {http_err}")
+        return None, None
+    except Exception as e:
+        print(f"✗ Failed to add magnet: {e}")
+        return None, None
+
+    if response and response.status_code in [200, 201]:
+        result = response.json()
+        return result, result.get('id')
+
+    return None, None
 
 def start_magnet_in_debrid(id):
     """Start magnet in Debrid."""
@@ -83,18 +89,10 @@ def get_magnet_link(torrent_url):
     magnet_link = soup.find('a', href=re.compile(r'^magnet:'))['href']
     return magnet_link
 
-def search_torrent(title: str):
-    """Search for a torrent across multiple sites."""
+def search_torrents(title: str):
+    """Search for torrents across multiple sites."""
     from .torrent_manager import TorrentManager
     
     manager = TorrentManager()
-    result = manager.search_all(title)
-    
-    if result:
-        return {
-            'name': result.name,
-            'seeders': result.seeders,
-            'magnet': result.magnet,
-            'source': result.source
-        }
-    return None
+    results = manager.search_all(title)
+    return results

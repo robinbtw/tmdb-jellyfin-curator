@@ -16,7 +16,7 @@ class TorrentResult:
 
 class TorrentSite(ABC):
     @abstractmethod
-    def search(self, title: str) -> Optional[TorrentResult]:
+    def search(self, title: str) -> List[TorrentResult]:
         pass
 
     def get_magnet_link(self, torrent_url: str) -> Optional[str]:
@@ -28,10 +28,10 @@ class TorrentSite(ABC):
         return magnet_link['href'] if magnet_link else None
     
 class SiteNyaa(TorrentSite):
-    def search(self, title: str) -> Optional[TorrentResult]:
-        #print(f"Searching for {title} on Nyaa")
+    def search(self, title: str) -> List[TorrentResult]:
         search_query = title.replace(' ', '+')
         url = f"https://nyaa.si/?f=0&c=0_0&q={search_query}&s=seeders&o=desc"
+        results = []
 
         try:
             response = requests.get(url, headers=HEADERS)
@@ -70,27 +70,28 @@ class SiteNyaa(TorrentSite):
                     continue
 
             if potential_torrents:
-                best_torrent = sorted(potential_torrents, reverse=True)[0]
-                magnet = self.get_magnet_link(best_torrent[1])
-                if magnet:
-                    return TorrentResult(
-                        name=best_torrent[2],
-                        seeders=best_torrent[0],
-                        magnet=magnet,
-                        source="Nyaa"
-                    )
+                # Sort by seeders and take top 3
+                top_torrents = sorted(potential_torrents, reverse=True)[:3]
+                for seeders, torrent_href, name in top_torrents:
+                    magnet = self.get_magnet_link(torrent_href)
+                    if magnet:
+                        results.append(TorrentResult(
+                            name=name,
+                            seeders=seeders,
+                            magnet=magnet,
+                            source="Nyaa"
+                        ))
         except Exception as e:
             print(f"✗ Error searching Nyaa: {e}")
 
-        print("✗ No torrents found on Nyaa")
         return None
 
 class Site1337x(TorrentSite):
-    def search(self, title: str) -> Optional[TorrentResult]:
-        #print(f"Searching for {title} on 1337x")
+    def search(self, title: str) -> List[TorrentResult]:
         search_query = title.replace(' ', '+')
         domain = "https://1337x.to"
         url = f"{domain}/search/{search_query}/1/"
+        results = []
 
         try:
             response = requests.get(url, headers=HEADERS)
@@ -104,41 +105,43 @@ class Site1337x(TorrentSite):
 
             potential_torrents = []
             for row in tbody.find_all('tr')[:10]:
-                try:
-                    name = row.find_all('td')[0].find_all('a')[-1].text
-                    seeders = int(row.find_all('td')[1].text)
+
+                name = row.find_all('td')[0].find_all('a')[-1].text
+                seeders = int(row.find_all('td')[1].text)       
+                name_lower = name.lower()
+
+                if (seeders >= 5 and
+                    ("1080p" in name_lower or "bluray" in name_lower) and
+                    "sample" not in name_lower and
+                    "telesync" not in name_lower and "cam" not in name_lower):
+
                     
-                    name_lower = name.lower()
-                    if (seeders >= 5 and
-                        ("1080p" in name_lower or "bluray" in name_lower) and
-                        "sample" not in name_lower and
-                        "telesync" not in name_lower and "cam" not in name_lower):
-                        
-                        torrent_href = domain + row.find_all('td')[0].find_all('a')[-1]['href']
-                        potential_torrents.append((seeders, torrent_href, name))
-                except (IndexError, ValueError):
-                    continue
+                    torrent_href = domain + row.find_all('td')[0].find_all('a')[-1]['href']
+                    potential_torrents.append((seeders, torrent_href, name))
 
             if potential_torrents:
-                best_torrent = sorted(potential_torrents, reverse=True)[0]
-                magnet = self.get_magnet_link(best_torrent[1])
-                if magnet:
-                    return TorrentResult(
-                        name=best_torrent[2],
-                        seeders=best_torrent[0],
-                        magnet=magnet,
-                        source="1337x"
-                    )
+                # Sort by seeders and take top 3
+                top_torrents = sorted(potential_torrents, key=lambda x: x[0], reverse=True)[:3]
+                for torrent in top_torrents:
+                    magnet = self.get_magnet_link(torrent[1])
+                    if magnet:
+                        results.append(TorrentResult(
+                            name=torrent[2],
+                            seeders=torrent[0],
+                            magnet=magnet,
+                            source="1337x"
+                        ))
+
+            return results
         except Exception as e:
             print(f"✗ Error searching 1337x: {e}")
         
-        print("✗ No torrents found on 1337x")
         return None
 
 class SiteYTS(TorrentSite):
-    def search(self, title: str) -> Optional[TorrentResult]:
-        #print(f"Searching for {title} on YTS")
+    def search(self, title: str) -> List[TorrentResult]:
         search_query = title.replace(' ', '+').lower()
+        results = []
 
         search_url = f"https://yts.mx/api/v2/list_movies.json?query_term={search_query}"
         response = requests.get(search_url, headers=HEADERS, timeout=10)
@@ -165,15 +168,13 @@ class SiteYTS(TorrentSite):
             if movie_title == title.lower() or movie_title in title.lower():
                 torrents = movie.get('torrents', [])
                 
-                # Find the best quality 1080p torrent
-                best_torrent = None
-                for torrent in torrents:
-                    if torrent['quality'] == '1080p':
-                        if not best_torrent or torrent['seeds'] > best_torrent['seeds']:
-                            best_torrent = torrent
+                # Get all 1080p torrents
+                hd_torrents = [t for t in torrents if t['quality'] == '1080p']
+                # Sort by seeds and take top 3
+                top_torrents = sorted(hd_torrents, key=lambda x: x['seeds'], reverse=True)[:3]
                 
-                if best_torrent:
-                    hash = best_torrent.get('hash')
+                for torrent in top_torrents:
+                    hash = torrent.get('hash')
                     if hash:
                         # Construct magnet link
                         magnet = (
@@ -189,12 +190,12 @@ class SiteYTS(TorrentSite):
                             "&tr=udp://tracker.leechers-paradise.org:6969"
                         )
                         
-                        return TorrentResult(
-                            name=f"{movie['title']} (1080p)",
-                            seeders=best_torrent.get('seeds', 0),
+                        results.append(TorrentResult(
+                            name=f"{movie['title']}",
+                            seeders=torrent.get('seeds', 0),
                             magnet=magnet,
                             source="YTS"
-                        )
-        
-        print("✗ No torrents found on YTS")     
+                        ))
+
+            return results
         return None

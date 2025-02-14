@@ -125,12 +125,16 @@ def get_movies_by_keyword(keyword_id, max_results):
 
         return []
     
-def waiting_animation_dots(message="Processing", delay=0.3, iterations=3):
-    """Display a waiting animation with dots."""
-    for i in range(iterations):
-        dots = "." * (i + 1)
-        print(f"\r{message}{dots}", end="", flush=True)
+def waiting_animation_spinner(message="Processing", delay=0.1, iterations=3):
+    """Display a waiting animation with a spinning cursor."""
+    spinner = ['|', '/', '-', '\\']
+    iterations_per_cycle = len(spinner)
+    
+    for i in range(iterations * iterations_per_cycle):
+        spin = spinner[i % iterations_per_cycle]
+        print(f"\r{message} {spin} ({i}/{iterations * iterations_per_cycle})", end="", flush=True)
         time.sleep(delay)
+    print()
 
 def get_movie_details(movie_id):
     """Get detailed information about a specific movie."""
@@ -159,23 +163,24 @@ def get_movie_certification(movie):
 
 def process_movie_parallel(movie):
     """Process a single movie in parallel - handles torrent search and magnet addition"""
-    from utils.torrent import search_torrent
+    from utils.torrent import search_torrents
 
     title = movie.get('title')
     release_date = movie.get('release_date')[:4]
     search_term = f"{title} {release_date}"
     
-    print(f"Processing: {search_term}")
-    torrent = search_torrent(search_term)
-    
-    if torrent:
-        response, id = add_magnet_to_debrid(torrent['magnet'])
-        if response:
-            start_magnet_in_debrid(id)
-            print(f"✓ {title} ({release_date}) is now in real-debrid ({torrent['source']})!")
-            return True
-    print(f"✗ Failed to process {title}")
-    return False
+    torrents = search_torrents(search_term)  
+    if torrents:
+        for torrent in torrents:
+            magnet = torrent[0].magnet
+            result, id = add_magnet_to_debrid(magnet)
+            if result:
+                start_magnet_in_debrid(id)
+                print(f"✓ {title} ({release_date}) added to debrid!")
+                return True
+    else:
+        print(f"✗ Failed to process {title}")
+        return False
 
 def add_movie_to_collection_parallel(movie, group_id):
     """Add a single movie to Jellyfin collection in parallel"""
@@ -226,8 +231,7 @@ if __name__ == "__main__":
                 print(f"\nProcessed {successful}/{len(movies)} movies successfully")
 
             # Wait for zurg to reload
-            for i in range(30):
-                waiting_animation_dots(f"Wait for zurg reload... {i+1}/30")
+            waiting_animation_spinner(f"Wait for zurg reload", delay=0.1, iterations=75)
 
         if input("\nWould you like to add movies to a collection? (y/n): ").lower() == 'y':
 
@@ -235,8 +239,7 @@ if __name__ == "__main__":
             do_library_scan()   
 
             # wait for the library to update
-            for i in range(15):
-                waiting_animation_dots(f"Waiting for library to update... {i+1}/15")
+            waiting_animation_spinner(f"Waiting for library to update", delay=0.1, iterations=50)
                 
             # Create a jellyfin collection with the keyword if not already created
             if not group_id:
