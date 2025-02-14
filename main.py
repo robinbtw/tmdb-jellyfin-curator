@@ -1,130 +1,131 @@
-# Standard library imports
-import os
-import uuid
+"""
+Filename: main.py
+Date: 2023-10-05
+Author: robinbtw
+
+Description:
+This script allows you to search for movies by keyword or person on TMDB, process them using torrent sites,
+add them to Real-Debrid, and add them to a Jellyfin collection.
+"""
+
+# Import standard libraries
 import time
-import random
 import argparse
+import random
 import concurrent.futures
 
-# Third-party imports
-import requests
-from dotenv import load_dotenv
+# Import managers
+from managers.tmdb import TMDBManager
+from managers.jellyfin import JellyfinManager
+from managers.debrid import RealDebridManager
+from managers.torrent import TorrentManager
 
-# Local imports
-from utils.torrent import (
-    add_magnet_to_debrid,
-    start_magnet_in_debrid
-)
-
-# Jellyfin imports
-from utils.jellyfin import (
-    create_jellyfin_collection,
-    add_movie_to_collection,
-    get_jellyfin_movie,
-    do_library_scan
-)
-
-load_dotenv()
-
-TMDB_API_KEY = os.getenv('TMDB_API_KEY')
-TMDB_API_URL = os.getenv('TMDB_API_URL')
-TUNARR_API_URL = os.getenv('TUNARR_SERVER') + "/api" 
-
-# Generic keywords that are more likely to return good results
-generic_keywords = [
-    "horror", "action", "comedy", 
+# Define generic keywords
+g_generic_keywords = [
+    "horror", "comedy", 
     "drama", "adventure", "fantasy",
     "mystery", "crime", "thriller", "romance",
     "animation", "documentary", "family", "horror", "western", "war",
-    "history", "biography", "sport", "reality", "game"]
+    "history", "biography", "sport", "reality"]
 
-# Specific keywords that are more likely to return good results
-specific_keywords  = [
+# Define specific keywords
+g_specific_keywords  = [
     "antihero", "female protagonist", "superhero", 
     "mcu", "disaster", "live action", "based on young adult novel",
     "based on video game"]
 
-def search_keyword_id(keyword, title="Unknown"):
-    """Search for a keyword and return the ID."""
-    # Construct the API endpoint and parameters
-    endpoint = f"{TMDB_API_URL}/search/keyword"
-    params = {
-        "api_key": TMDB_API_KEY,
-        "query": keyword,
-    }
+# Initialize managers
+g_tmdb = TMDBManager()
+g_torrent = TorrentManager()
+g_debrid = RealDebridManager()
+g_jellyfin = JellyfinManager()
+
+def search_for_a_keyword(keyword, title=""):
+    """Search for a keyword on TMDB and return the ID and name."""
+    results = g_tmdb.get_keyword(keyword).get("results", [])
+
+    if not results:
+        print("No results found. Try:")
+        print(f"`{random.choice(g_specific_keywords)}`, `{random.choice(g_generic_keywords)}`")
+        quit()
+
+    print("Found these keyword matches:")
+    for i, result in enumerate(results, 1):
+        print(f"{i}. {result.get('name')}")
+
+    while True:
+        try:
+            choice = int(input(f"\nSelect a keyword (1-{len(results)}): "))
+            if 1 <= choice <= len(results):
+                return results[choice-1].get("id"), results[choice-1].get("name") or title
+            print("Please enter a valid number.")
+        except ValueError:
+            print("Please enter a valid number.")
+
+def get_movies_by_person(id, limit=50):
+    """Get movies by person ID from TMDB."""
+    response = g_tmdb.get_combined_credits(id)
+    credits = response.get("cast", [])
+
+    # Get only movies
+    movies = [credit for credit in credits if credit.get("media_type") == "movie"]
+ 
+    # Sort by vote average and return top movies
+    return sorted(movies, key=lambda x: x.get('vote_average', 0), reverse=True)[:limit]
     
-    try:
-        # Make API request and validate response
-        response = requests.get(endpoint, params=params, timeout=10)
-        response.raise_for_status()
-        results = response.json().get("results", [])
-        
-        if results:
-            # Display matching keywords to user
-            print("\nFound these keyword matches:")
-            for i, result in enumerate(results, 1):
-                print(f"{i}. {result.get('name')}")
-      
-            # Keep prompting until valid selection is made
-            while True:
-                try:
-                    choice = int(input("\nSelect a keyword (1-{0}): ".format(len(results))))
-                    if 1 <= choice <= len(results):
-                        return results[choice-1].get("id"), results[choice-1].get("name") or title
-                    
-                    print("Please enter a valid number.")
-                    quit()
-                except ValueError:
-                    print("Please enter a valid number.")
-                    quit()
-        else:
-            print("No results found. Try:")
-            print(f"`{random.choice(specific_keywords)}`, `{random.choice(generic_keywords)}`")
-            quit()
-   
-    except requests.exceptions.RequestException as e:
-        print(f"TMDB API error: {e}")
-        return None
+def get_movies_by_keyword(id, limit=50):
+    """Get movies by keyword ID from TMDB."""
+    results = []
+    response, params = g_tmdb.get_movies_by_keyword(id)
 
-def get_movies_by_keyword(keyword_id, max_results):
-    """Get movies by keyword from the TMDB API."""
-    endpoint = f"{TMDB_API_URL}/keyword/{keyword_id}/movies"
-    params = {
-        "api_key": TMDB_API_KEY,
-        "page": 1,
-    }
+    pages = response.get("total_pages", 1) # Get total pages
+    results.extend(response.get("results", [])) # Get first page results
 
-    results = []  # Initialize results list
+    for page in range(2, pages + 1):
+        params["page"] = page
+        response = g_tmdb.get_movies_by_keyword(id, page=page)
+        results.extend(response.get("results", [])) # Append results from next pages
+
+        if len(results) >= limit:
+            return sorted(results[:limit], key=lambda x: x.get('vote_average', 0), reverse=True)
+
+    # Sort all results by vote average before returning
+    return sorted(results, key=lambda x: x.get('vote_average', 0), reverse=True)
+
+def process_movie_parallel(movie):
+    """Process a movie in parallel by adding it to real-debrid."""
+    title = movie.get("title")
+    release_date = movie.get("release_date")[:4]
+    search_term = f"{title} {release_date}"
+
+    print(f"Processing {title} {release_date}...")
+    torrents = g_torrent.search_all_sites(search_term)
+
+    if torrents:
+        for torrent in torrents:
+            magnet = torrent.magnet
+            result = g_debrid.add_magnet_to_debrid(magnet)
+            if result:
+                print(f"✓ Added {title} {release_date} to debrid!")
+                return True
+    else:
+        print(f"✗ Failed to proccess {title}")
+        return False
     
-    try:
-        response = requests.get(endpoint, params=params)
-        response.raise_for_status()  # Check initial request
+def add_movie_to_collection_parallel(movie, collection_id):
+    """Add a movie to a jellyfin collection in parallel."""
+    title = movie.get("title")
+    year = movie.get("release_date")[:4]
+    movie_id = g_jellyfin.get_jellyfin_movie(title)
 
-        data = response.json()
-        total_pages = data.get("total_pages", 1)  # Handle missing total_pages
-        results.extend(data.get("results", []))  # Add initial results
-
-        # Stop if we hit max results
-        if len(results) >= max_results:
-            return sorted(results[:max_results], key=lambda x: x.get('vote_average', 0), reverse=True)
-
-        # Iterate remaining pages until we hit max results
-        for page in range(2, total_pages + 1):
-            params["page"] = page
-            response = requests.get(endpoint, params=params)
-            response.raise_for_status()
-            results.extend(response.json().get("results", []))
-            
-            if len(results) >= max_results:
-                return sorted(results[:max_results], key=lambda x: x.get('vote_average', 0), reverse=True)
-
-        # Sort all results by vote average before returning
-        return sorted(results, key=lambda x: x.get('vote_average', 0), reverse=True)
-    except requests.exceptions.RequestException as e:
-        print(f"TMDB API error: {e}")
-
-        return []
+    if movie_id:
+        g_jellyfin.add_movie_to_collection(movie_id, collection_id)
+        print(f"✓ Added {title} {year} to collection!")
+        return True
     
+    print(f"✗ Failed to add {title} {year} to collection!")
+    return False
+
 def waiting_animation_spinner(message="Processing", delay=0.1, iterations=3):
     """Display a waiting animation with a spinning cursor."""
     spinner = ['|', '/', '-', '\\']
@@ -134,93 +135,39 @@ def waiting_animation_spinner(message="Processing", delay=0.1, iterations=3):
         spin = spinner[i % iterations_per_cycle]
         print(f"\r{message} {spin} ({i}/{iterations * iterations_per_cycle})", end="", flush=True)
         time.sleep(delay)
+
     print()
 
-def get_movie_details(movie_id):
-    """Get detailed information about a specific movie."""
-    endpoint = f"{TMDB_API_URL}/movie/{movie_id}"
-    params = {
-        "api_key": TMDB_API_KEY,
-    }
-    try:
-        response = requests.get(endpoint, params=params)
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        print(f"TMDB API error: {e}")
-        return None
-    
-def get_movie_certification(movie):
-    """Get the certification for a specific movie."""
-    endpoint = f"{TMDB_API_URL}/movie/{movie.get('id')}/release_dates"
-    params = {
-        "api_key": TMDB_API_KEY,
-    }
-    response = requests.get(endpoint, params=params)
-    response.raise_for_status()
-    return response.json()["results"]["certification"]
-    
+def main():
+    movies = None
+    group_id = None
 
-def process_movie_parallel(movie):
-    """Process a single movie in parallel - handles torrent search and magnet addition"""
-    from utils.torrent import search_torrents
+    # Set up argumaent parser
+    parser = argparse.ArgumentParser(description="Search for movies by keyword or person!")
+    parser.add_argument("-k", "--keyword", type=str, help="Search for movies by keyword!")
+    parser.add_argument("-p", "--person", type=str, help="Search for movies by person!")
+    parser.add_argument("-l", "--limit", type=int, default=50, help="Limit the number of movies to search for!")
 
-    title = movie.get('title')
-    release_date = movie.get('release_date')[:4]
-    search_term = f"{title} {release_date}"
-    
-    torrents = search_torrents(search_term)  
-    if torrents:
-        for torrent in torrents:
-            magnet = torrent[0].magnet
-            result, id = add_magnet_to_debrid(magnet)
-            if result:
-                start_magnet_in_debrid(id)
-                print(f"✓ {title} ({release_date}) added to debrid!")
-                return True
-    else:
-        print(f"✗ Failed to process {title}")
-        return False
-
-def add_movie_to_collection_parallel(movie, group_id):
-    """Add a single movie to Jellyfin collection in parallel"""
-    title = movie.get('title')
-    year = movie.get('release_date')[:4]
-    item_id = get_jellyfin_movie(title)
-    
-    if item_id:
-        add_movie_to_collection(group_id, item_id)
-        print(f"✓ {title} ({year}) added to collection!")
-        return True
-    print(f"✗ Failed to add {title} to collection")
-    return False
-
-if __name__ == "__main__":
-    print("Starting...")
-
-    # Set up argument parser
-    parser = argparse.ArgumentParser(description='Search and process movies by keyword or person')
-    parser.add_argument('--keyword', '-k', type=str, help='Keyword to search for (use quotes for multiple words)')
-    parser.add_argument('--max-results', '-m', type=int, default=50, help='Maximum number of movies to process')
-    
     # Warning: Increasing workers may cause rate limiting on some APIs
-    parser.add_argument('--workers', '-w', type=int, default=1, help='Number of parallel workers')
+    parser.add_argument("-w", "--workers", type=int, default=1, help="Number of workers to use for processing!")
     args = parser.parse_args()
 
-    keyword = args.keyword if args.keyword else input("Enter a keyword to search for: ")
-    keyword_id, title = search_keyword_id(keyword)
+    if args.person:
+        movies = get_movies_by_person(args.person, args.limit)
+    else:
+        keyword = args.keyword if args.keyword else input("Enter a keyword to search for: ")
+        keyword_id, name = search_for_a_keyword(keyword)
 
-    if keyword_id:
-        movies = get_movies_by_keyword(keyword_id, args.max_results)
+        if keyword_id:
+            movies = get_movies_by_keyword(keyword_id, args.limit)
 
-    group_id = None
     if movies:
 
-        if input("\nCreate a jellyfin collection with this collection? (y/n): ").lower() == 'y':              
-           # Create a jellyfin collection with the keyword
-            group_id = create_jellyfin_collection(title)
+        if input("\nCreate a jellyfin collection with this collection? (y/n): ").lower() == 'y':
+            group_id = g_jellyfin.create_jellyfin_collection(name)
 
         if input(f"\nWould you like to add movies to real-debrid? ({len(movies)}) (y/n): ").lower() == 'y':
+
             # Process movies in parallel using ThreadPoolExecutor
             with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
                 futures = [executor.submit(process_movie_parallel, movie) for movie in movies]
@@ -230,22 +177,19 @@ if __name__ == "__main__":
                 successful = sum(1 for future in futures if future.result())
                 print(f"\nProcessed {successful}/{len(movies)} movies successfully")
 
-            # Wait for zurg to reload
-            waiting_animation_spinner(f"Wait for zurg reload", delay=0.1, iterations=75)
-
         if input("\nWould you like to add movies to a collection? (y/n): ").lower() == 'y':
 
             # Do a library scan to ensure the movies are added to the library
-            do_library_scan()   
+            g_jellyfin.do_library_scan()   
 
             # wait for the library to update
-            waiting_animation_spinner(f"Waiting for library to update", delay=0.1, iterations=50)
-                
+            waiting_animation_spinner(f"Waiting for library to update", delay=0.1, iterations=50) 
+
             # Create a jellyfin collection with the keyword if not already created
             if not group_id:
-                group_id = create_jellyfin_collection(title)
+                group_id = g_jellyfin.create_jellyfin_collection(name)        
 
-            # Add movies to collection in parallel
+                        # Add movies to collection in parallel
             with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
                 futures = [executor.submit(add_movie_to_collection_parallel, movie, group_id) for movie in movies]
                 
@@ -253,6 +197,9 @@ if __name__ == "__main__":
                 concurrent.futures.wait(futures)
                 successful = sum(1 for future in futures if future.result())
                 print(f"\nAdded {successful}/{len(movies)} movies to collection successfully")
-
     else:
-        print("No movies found with the keyword.")
+        print("✗ Error: No movies found quiting program!")
+        quit()          
+        
+if __name__ == "__main__":
+    main()
