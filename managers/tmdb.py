@@ -58,10 +58,6 @@ class TMDBManager:
     def get_movie_release_dates(self, movie_id):
          """Retrieves release dates for a specific movie by ID from TMDB."""
          return self._make_request('GET', f'/movie/{movie_id}/release_dates')
-
-    def get_movie_credits(self, movie_id):
-        """Retrieves credits for a specific movie by ID from TMDB."""
-        return self._make_request('GET', f'/movie/{movie_id}/credits')
     
     def get_keyword(self, keyword):
         """Searches for a keyword by name on TMDB."""
@@ -73,7 +69,7 @@ class TMDBManager:
         params = {'page': page}
         return self._make_request('GET', f'/keyword/{keyword_id}/movies', params=params), params
     
-    def get_combined_credits(self, person_id):
+    def get_movie_credits(self, person_id):
         """Retrieves combined credits for a specific person by ID from TMDB."""
-        return self._make_request('GET', f'/person/{person_id}/combined_credits')
+        return self._make_request('GET', f'/person/{person_id}/movie_credits')
     

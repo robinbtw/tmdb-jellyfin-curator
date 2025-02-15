@@ -47,7 +47,12 @@ def search_for_a_keyword(keyword, title=""):
     if not results:
         print("No results found. Try:")
         print(f"`{random.choice(g_specific_keywords)}`, `{random.choice(g_generic_keywords)}`")
-        quit()
+  
+    try:
+        if title:
+            return results[0].get("id"), title
+    except Exception as e:
+        return None, None
 
     print("Found these keyword matches:")
     for i, result in enumerate(results, 1):
@@ -64,36 +69,32 @@ def search_for_a_keyword(keyword, title=""):
 
 def search_for_a_person(person):
     """Search for a person on TMDB and return the ID and name."""
+    print(f"Searching for {person}...")
     results = g_tmdb.get_person(person).get("results", [])[:8] 
     if not results:
-        print("No results found. Try another person.")
-        quit()
+        return None, None
 
-    print("Found these person matches:")
-    for i, result in enumerate(results, 1):
-        known = ", ".join([credit.get("title") or credit.get("name") or "Unknown" for credit in result.get("known_for", [])])
-        print(f"{i}. {result.get('name')} ({known})")
+    print("Getting most popular person...")
+    # Get movie count for each person
+    people_with_counts = []
+    for result in results:
+        person_id = result.get("id")
+        movie_credits = g_tmdb.get_movie_credits(person_id)
+        movie_count = len(movie_credits.get("cast", []))
+        people_with_counts.append((result, movie_count))
 
-    while True:
-        try:
-            choice = int(input(f"\nSelect a person (1-{len(results)}): "))
-            if 1 <= choice <= len(results):
-                return results[choice-1].get("id"), results[choice-1].get("name")
-            print("Please enter a valid number.")
-        except ValueError:
-            print("Please enter a valid number.")
+    # Sort by movie count and get the person with most movies
+    top = sorted(people_with_counts, key=lambda x: x[1], reverse=True)
+    return top[0][0].get("id"), top[0][0].get("name")
 
 def get_movies_by_person(id, limit=50):
     """Get movies by person ID from TMDB."""
-    response = g_tmdb.get_combined_credits(id)
+    response = g_tmdb.get_movie_credits(id)
     credits = response.get("cast", [])
-
-    # Get only movies
-    movies = [credit for credit in credits if credit.get("media_type") == "movie"]
  
     # Sort by vote average and return top movies
-    return sorted(movies, key=lambda x: x.get('vote_average', 0), reverse=True)[:limit]
-    
+    return sorted(credits[:limit], key=lambda x: x.get('vote_average', 0), reverse=True)
+
 def get_movies_by_keyword(id, limit=50):
     """Get movies by keyword ID from TMDB."""
     results = []
@@ -104,7 +105,7 @@ def get_movies_by_keyword(id, limit=50):
 
     for page in range(2, pages + 1):
         params["page"] = page
-        response = g_tmdb.get_movies_by_keyword(id, page=page)
+        response, *_ = g_tmdb.get_movies_by_keyword(id, page=page)
         results.extend(response.get("results", [])) # Append results from next pages
 
         if len(results) >= limit:
@@ -170,10 +171,54 @@ def main():
     parser.add_argument("-p", "--person", type=str, help="Search for movies by person!")
     parser.add_argument("-l", "--limit", type=int, default=50, help="Limit the number of movies to search for!")
     parser.add_argument("-b", "--bypass", action="store_true", help="Bypass all input prompts and default to 'yes'")
+    parser.add_argument("-r", "--refresh", action="store_true", help="Refresh/Sync collections!")
 
     # Warning: Increasing workers may cause rate limiting on some APIs
     parser.add_argument("-w", "--workers", type=int, default=1, help="Number of workers to use for processing!")
     args = parser.parse_args()
+
+    if args.refresh:
+        print("Refreshing all collections...")
+        g_jellyfin.do_library_scan()
+
+        # wait for the library to update
+        waiting_animation_spinner(f"Waiting for library to update", delay=0.1, iterations=50) 
+        collections = g_jellyfin.get_all_jellyfin_collections().get("Items", [])
+
+        # Sync/refresh all collections 
+        # (use more workers for faster processing)
+        for item in collections:
+            id = item.get("Id")
+            name = item.get("Name")     
+
+            person_id, _ = search_for_a_person(name)
+            if person_id:
+                movies = get_movies_by_person(person_id, args.limit)
+                if movies:
+                    # Sync movies to collection in parallel
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
+                        futures = [executor.submit(add_movie_to_collection_parallel, movie, id) for movie in movies]
+                        
+                        # Wait for all tasks to complete
+                        concurrent.futures.wait(futures)
+                        successful = sum(1 for future in futures if future.result())
+                        print(f"\nAdded {successful}/{len(movies)} movies ({name}) successfully!")
+
+            keyword_id, _ = search_for_a_keyword(name, name)
+            if keyword_id:
+                movies = get_movies_by_keyword(keyword_id, args.limit)
+                if movies:
+                    # Sync movies to collection in parallel
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
+                        futures = [executor.submit(add_movie_to_collection_parallel, movie, id) for movie in movies]
+                        
+                        # Wait for all tasks to complete
+                        concurrent.futures.wait(futures)
+                        successful = sum(1 for future in futures if future.result())
+                        print(f"\nAdded {successful}/{len(movies)} movies ({name}) successfully!")
+        
+        print("✓ Refreshed all collections successfully!")
+        quit()
 
     if args.person:
         person_id, name = search_for_a_person(args.person)
@@ -188,7 +233,7 @@ def main():
 
     if movies:
 
-        if args.bypass or input("\nCreate a jellyfin collection with this collection? (y/n): ").lower() == 'y':
+        if args.bypass or input(f"\nCreate a jellyfin collection for {name.lower()}? (y/n): ").lower() == 'y':
             group_id = g_jellyfin.create_jellyfin_collection(name.lower())
 
         if args.bypass or input(f"\nWould you like to add movies to real-debrid? ({len(movies)}) (y/n): ").lower() == 'y':
@@ -200,9 +245,12 @@ def main():
                 # Wait for all tasks to complete
                 concurrent.futures.wait(futures)
                 successful = sum(1 for future in futures if future.result())
-                print(f"\nProcessed {successful}/{len(movies)} movies successfully")
+                print(f"\nProcessed {successful}/{len(movies)} movies ({name}) successfully!")
 
-        if args.bypass or input("\nWould you like to add movies to a collection? (y/n): ").lower() == 'y':
+            # Wait for zurg to refresh/sync movies
+            waiting_animation_spinner(f"Waiting for zurg sync", delay=0.1, iterations=75)
+
+        if args.bypass or input(f"\nWould you like to add movies to the collection? (y/n): ").lower() == 'y':
 
             # Do a library scan to ensure the movies are added to the library
             g_jellyfin.do_library_scan()   
@@ -214,14 +262,14 @@ def main():
             if not group_id:
                 group_id = g_jellyfin.create_jellyfin_collection(name.lower())        
 
-                        # Add movies to collection in parallel
+            # Add movies to collection in parallel
             with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
                 futures = [executor.submit(add_movie_to_collection_parallel, movie, group_id) for movie in movies]
                 
                 # Wait for all tasks to complete
                 concurrent.futures.wait(futures)
                 successful = sum(1 for future in futures if future.result())
-                print(f"\nAdded {successful}/{len(movies)} movies to collection successfully")
+                print(f"\nAdded {successful}/{len(movies)} movies to collection successfully!")
     else:
         print("✗ Error: No movies found quiting program!")
         quit()          

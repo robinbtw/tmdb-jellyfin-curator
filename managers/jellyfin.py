@@ -130,6 +130,18 @@ class JellyfinManager:
             print(f"✗ Failed to retrieve collection {collection_name}: {e}")
             return None
         
+    def get_all_jellyfin_collections(self):
+        """Retrieves all Jellyfin collections."""
+        try:
+            url = f"{self.jellyfin_server}/Items?recursive=true&includeItemTypes=BoxSet"
+            response = requests.get(url, headers=self.headers)
+            response.raise_for_status()
+            return response.json()
+        
+        except requests.exceptions.RequestException as e:
+            print(f"✗ Failed to retrieve all collections: {e}")
+            return None
+        
     def is_movie_in_collection(self, movie_id, collection_id):
         """Checks if a movie is already in a Jellyfin collection."""
         try:
@@ -159,3 +171,15 @@ class JellyfinManager:
 
         except requests.exceptions.RequestException as e:
             print(f"✗ Failed to add movie to collection: {e}")
+
+    def get_all_movies(self):
+        """Retrieves all movies from Jellyfin."""
+        try:
+            url = f"{self.jellyfin_server}/Items?recursive=true&includeItemTypes=Movie"
+            response = requests.get(url, headers=self.headers)
+            response.raise_for_status()
+            return response.json()
+        
+        except requests.exceptions.RequestException as e:
+            print(f"✗ Failed to retrieve all movies: {e}")
+            return None
