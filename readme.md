@@ -10,8 +10,8 @@ A Python-based automation tool that helps manage movie collections by integratin
 
 ## Features
 
-- Search movies by keywords using TMDB API
-- Automated torrent search across multiple sites (1337x, YTS, Nyaa)
+- Search movies by keywords or people using TMDB API
+- Automated torrent search across multiple sites (1337x, YTS)
 - Smart torrent selection based on quality and seeder count
 - Real-Debrid integration for secure downloading
 - Automatic Jellyfin collection management
@@ -22,8 +22,8 @@ A Python-based automation tool that helps manage movie collections by integratin
 
 - Python 3.x
 - [Jellyfin](https://jellyfin.org/) server (plex/emby currently not supported)
-- Real-Debrid account and api key
-- TMDb account and api key
+- Real-Debrid account with api key
+- TMDb account and with api key
 - [Zurg](https://github.com/debridmediamanager/zurg-testing) setup for Real-Debrid
 - [Rclone](https://rclone.org) for cloud storage mounting in windows explorer
 
@@ -43,15 +43,15 @@ pip install -r requirements.txt
 3. Create a `.env` file in the root directory with your configuration:
 ```env
 # Jellyfin Configuration
-JELLYFIN_SERVER=http://your-server:8096
-JELLYFIN_API_KEY=your-api-key
-JELLYFIN_MOVIE_LIBRARY_ID=your-library-id
+JELLYFIN_SERVER=http://localhost:8096
+JELLYFIN_API_KEY=your-jellyfin-api-key
 
 # TMDb Configuration
 TMDB_API_KEY=your-tmdb-api-key
 TMDB_API_URL=https://api.themoviedb.org/3
 
 # Real-Debrid Configuration
+REAL_DEBRID_API_URL=https://api.real-debrid.com/rest/1.0
 REAL_DEBRID_API_KEY=your-real-debrid-api-key
 ```
 
@@ -60,26 +60,26 @@ REAL_DEBRID_API_KEY=your-real-debrid-api-key
 Run the script with command line arguments:
 
 ```bash
-python main.py -k "keyword" -m max_results -w workers
+python main.py -k "keyword" -l limit -w workers
 ```
 
 Arguments:
 - `-k, --keyword`: Search keyword (use quotes for multiple words)
-- `-m, --max-results`: Maximum number of movies to process (default: 30)
+- `-p, --person`: Search by Cast, Crew, Writer, etc
+- `-l, --limit`: Maximum number of movies to process (default: 50)
 - `-w, --workers`: Number of parallel workers (default: 1)
 
 Example:
 ```bash
-python main.py -k "action" # generic genre may be too vague
+python main.py -p "anne hathaway" -w 3 # anne hathaway movies (default 50 results, 3 workers)
 python ma1n.py -k "racing" # racing movies
-python main.py -k "time travel" -m 20 # time travel movies (max 20 results)
-python main.py -k "superhero" -m 50 -w 6 # superhero movies (max 50 results, 6 workers)
+python main.py -k "time travel" -l 20 # time travel movies (limit 20 results)
+python main.py -k "superhero" -l 50 -w 6 # superhero movies (limit 50 results, 6 workers)
 ```
 
 ## Supported Torrent Sites
 - 1337x
 - YTS
-- Nyaa
 
 ## Features Breakdown
 

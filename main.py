@@ -62,6 +62,27 @@ def search_for_a_keyword(keyword, title=""):
         except ValueError:
             print("Please enter a valid number.")
 
+def search_for_a_person(person):
+    """Search for a person on TMDB and return the ID and name."""
+    results = g_tmdb.get_person(person).get("results", [])[:8] 
+    if not results:
+        print("No results found. Try another person.")
+        quit()
+
+    print("Found these person matches:")
+    for i, result in enumerate(results, 1):
+        known = ", ".join([credit.get("title") or credit.get("name") or "Unknown" for credit in result.get("known_for", [])])
+        print(f"{i}. {result.get('name')} ({known})")
+
+    while True:
+        try:
+            choice = int(input(f"\nSelect a person (1-{len(results)}): "))
+            if 1 <= choice <= len(results):
+                return results[choice-1].get("id"), results[choice-1].get("name")
+            print("Please enter a valid number.")
+        except ValueError:
+            print("Please enter a valid number.")
+
 def get_movies_by_person(id, limit=50):
     """Get movies by person ID from TMDB."""
     response = g_tmdb.get_combined_credits(id)
@@ -153,7 +174,9 @@ def main():
     args = parser.parse_args()
 
     if args.person:
-        movies = get_movies_by_person(args.person, args.limit)
+        person_id, name = search_for_a_person(args.person)
+        if person_id:
+            movies = get_movies_by_person(person_id, args.limit)
     else:
         keyword = args.keyword if args.keyword else input("Enter a keyword to search for: ")
         keyword_id, name = search_for_a_keyword(keyword)

@@ -41,6 +41,11 @@ class TMDBManager:
         """Searches for a movie by name on TMDB."""
         params = {'query': movie_name}
         return self._make_request('GET', '/search/movie?include_adult=false&language=en-US&page=1', params=params)
+    
+    def get_person(self, person_name):
+        """Searches for a person by name on TMDB, return id."""
+        params = {'query': person_name}
+        return self._make_request('GET', '/search/person', params=params)
 
     def get_movie_details(self, movie_id):
         """Retrieves details for a specific movie by ID from TMDB."""
