@@ -160,6 +160,7 @@ def waiting_animation_spinner(message="Processing", delay=0.1, iterations=3):
     print()
 
 def main():
+    name = None
     movies = None
     group_id = None
 
@@ -168,6 +169,7 @@ def main():
     parser.add_argument("-k", "--keyword", type=str, help="Search for movies by keyword!")
     parser.add_argument("-p", "--person", type=str, help="Search for movies by person!")
     parser.add_argument("-l", "--limit", type=int, default=50, help="Limit the number of movies to search for!")
+    parser.add_argument("-b", "--bypass", action="store_true", help="Bypass all input prompts and default to 'yes'")
 
     # Warning: Increasing workers may cause rate limiting on some APIs
     parser.add_argument("-w", "--workers", type=int, default=1, help="Number of workers to use for processing!")
@@ -186,10 +188,10 @@ def main():
 
     if movies:
 
-        if input("\nCreate a jellyfin collection with this collection? (y/n): ").lower() == 'y':
-            group_id = g_jellyfin.create_jellyfin_collection(name)
+        if args.bypass or input("\nCreate a jellyfin collection with this collection? (y/n): ").lower() == 'y':
+            group_id = g_jellyfin.create_jellyfin_collection(name.lower())
 
-        if input(f"\nWould you like to add movies to real-debrid? ({len(movies)}) (y/n): ").lower() == 'y':
+        if args.bypass or input(f"\nWould you like to add movies to real-debrid? ({len(movies)}) (y/n): ").lower() == 'y':
 
             # Process movies in parallel using ThreadPoolExecutor
             with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
@@ -200,7 +202,7 @@ def main():
                 successful = sum(1 for future in futures if future.result())
                 print(f"\nProcessed {successful}/{len(movies)} movies successfully")
 
-        if input("\nWould you like to add movies to a collection? (y/n): ").lower() == 'y':
+        if args.bypass or input("\nWould you like to add movies to a collection? (y/n): ").lower() == 'y':
 
             # Do a library scan to ensure the movies are added to the library
             g_jellyfin.do_library_scan()   
@@ -210,7 +212,7 @@ def main():
 
             # Create a jellyfin collection with the keyword if not already created
             if not group_id:
-                group_id = g_jellyfin.create_jellyfin_collection(name)        
+                group_id = g_jellyfin.create_jellyfin_collection(name.lower())        
 
                         # Add movies to collection in parallel
             with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:

@@ -32,6 +32,7 @@ class JellyfinManager:
             response = requests.request(method, url, headers=self.headers, params=params, data=data, timeout=timeout)
             response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
             return response.json()
+        
         except requests.exceptions.RequestException as e:
             print(f"✗ API request failed: {e}")
             return None
@@ -52,6 +53,7 @@ class JellyfinManager:
                     break
             
             return task_id
+        
         except requests.exceptions.RequestException as e:
             print(f"✗ Failed to get library scan task Id: {e}")
             return None
@@ -67,6 +69,7 @@ class JellyfinManager:
                 response.raise_for_status()
                 if response.status_code == 204:
                     print("Starting library scan...")
+
         except requests.exceptions.RequestException as e:
             print(f"✗ Failed to perform library scan: {e}")
 
@@ -84,6 +87,7 @@ class JellyfinManager:
                     if item["Name"].lower() == movie_name.lower():
                         return item["Id"]
             return None
+        
         except requests.exceptions.RequestException as e:
             print(f"✗ Failed to retrieve item for movie {movie_name}: {e}")
             return None
@@ -96,13 +100,13 @@ class JellyfinManager:
                 print(f"Collection {collection_name} already exists lets use it.")
                 return collection
 
-            print("") # Add a new line
             print("Creating jellyfin collection...")
             url = f"{self.jellyfin_server}/Collections?Name={collection_name}"
             response = requests.post(url, headers=self.headers)
             response.raise_for_status()
 
             return response.json()["Id"]
+        
         except requests.exceptions.RequestException as e:
             print(f"✗ Failed to create collection {collection_name}: {e}")
             return None
@@ -121,39 +125,37 @@ class JellyfinManager:
                         return item["Id"]   
                        
             return None
+        
         except requests.exceptions.RequestException as e:
             print(f"✗ Failed to retrieve collection {collection_name}: {e}")
             return None
         
-    def is_movie_in_collection(self, name, collection_id):
+    def is_movie_in_collection(self, movie_id, collection_id):
         """Checks if a movie is already in a Jellyfin collection."""
         try:
-            url = f"{self.jellyfin_server}/Items?parentId={collection_id}&recursive=true&includeItemTypes=Movie&searchTerm={name}"
+            url = f"{self.jellyfin_server}/Items?parentId={collection_id}&recursive=true"
             response = requests.get(url, headers=self.headers)
             response.raise_for_status()
 
             items = response.json().get("Items", [])
             if items:
                 for item in items:
-                    if item["Name"].lower() == name.lower():
+                    if item["Id"].lower() == movie_id.lower():
                         return item["Id"]
             
         except requests.exceptions.RequestException as e:
-            print(f"✗ Failed to check if movie {name} is in collection: {e}")
+            print(f"✗ Failed to check if movie {movie_id} is in collection: {e}")
         return None
 
-    def add_movie_to_collection(self, collection_id, movie_id):
+    def add_movie_to_collection(self, movie_id, collection_id):
         """Adds a movie to a Jellyfin collection."""
         try:
-            if self.is_movie_in_collection(movie_id, collection_id):       
-                return True
-            
+            if self.is_movie_in_collection(movie_id, collection_id):
+                return
+
             url = f"{self.jellyfin_server}/Collections/{collection_id}/Items?ids={movie_id}"
             response = requests.post(url, headers=self.headers)
             response.raise_for_status()
 
-            if response.status_code == 204:
-                return True
-            return False
         except requests.exceptions.RequestException as e:
-            return False
+            print(f"✗ Failed to add movie to collection: {e}")
