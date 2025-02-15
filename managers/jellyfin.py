@@ -91,6 +91,16 @@ class JellyfinManager:
         except requests.exceptions.RequestException as e:
             print(f"✗ Failed to retrieve item for movie {movie_name}: {e}")
             return None
+        
+    def delete_jellyfin_movie(self, movie_id):
+        """Removes a movie from the Jellyfin library."""
+        try:
+            url = f"{self.jellyfin_server}/Items/{movie_id}"
+            response = requests.delete(url, headers=self.headers)
+            response.raise_for_status()
+        
+        except requests.exceptions.RequestException as e:
+            print(f"✗ Failed to remove movie {movie_id}: {e}")
 
     def create_jellyfin_collection(self, collection_name):
         """Creates a new collection in Jellyfin if it doesn't already exist."""
@@ -172,6 +182,16 @@ class JellyfinManager:
         except requests.exceptions.RequestException as e:
             print(f"✗ Failed to add movie to collection: {e}")
 
+    def remove_movie_from_collection(self, movie_id, collection_id):
+        """Removes a movie from a Jellyfin collection."""
+        try:
+            url = f"{self.jellyfin_server}/Collections/{collection_id}/Items/{movie_id}"
+            response = requests.delete(url, headers=self.headers)
+            response.raise_for_status()
+
+        except requests.exceptions.RequestException as e:
+            print(f"✗ Failed to remove movie from collection: {e}")
+
     def get_all_movies(self):
         """Retrieves all movies from Jellyfin."""
         try:
@@ -183,3 +203,27 @@ class JellyfinManager:
         except requests.exceptions.RequestException as e:
             print(f"✗ Failed to retrieve all movies: {e}")
             return None
+        
+    def cleanup_jellyfin_library(self):
+        """Removes duplicate movies from the Jellyfin library."""
+        print("Cleaning up jellyfin library...")
+        movies = self.get_all_movies().get("Items", [])
+        name_dict = {}
+
+        duplicates = 0 
+        for movie in movies:
+            if movie.get('Name') in name_dict:     
+                duplicates += 1           
+                self.delete_jellyfin_movie(movie.get('Id'))
+                print(f"✓ Deleted duplicate movie: { movie.get('Name') }")
+                continue
+
+            name_dict[movie.get('Name')] = movie
+        
+        print("✓ Jellyfin cleanup finished!")
+        print(f"Total: {len(movies)} | Duplicates: {duplicates} | "
+              f"Remaining: {len(name_dict)}")
+        
+
+            
+

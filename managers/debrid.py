@@ -47,7 +47,13 @@ class RealDebridManager:
         try:
             response = requests.request(method, url, headers=self.headers, params=params, data=data, timeout=timeout)
             response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
-            return response.json()
+
+            # Return True for successful DELETE requests (204 No Content)
+            if response.status_code == 204:
+                return True
+
+            # Parse JSON for other successful responses
+            return response.json() if response.text else None
         except requests.exceptions.RequestException as e:
             print(f"✗ API request failed: {e}")
             return None
@@ -71,7 +77,7 @@ class RealDebridManager:
             return seconds_left // 86400
         return None
 
-    def get_torrent_list(self, limit=100):
+    def get_torrent_list(self, limit=5000):
         """Get torrent list from Real-Debrid."""
         params = {'limit': limit}
         return self._make_request('GET', "/torrents", params=params)
@@ -161,6 +167,41 @@ class RealDebridManager:
                     print("✗ Torrent already exists in debrid!")
                     return True
         return False
+    
+    def cleanup_debrid_library(self):
+        """Clean up real-debrid library by removing duplicate torrents based on hash."""
+        print("Cleaning up real-debrid library...")
+        
+        # Get torrents or exit if none found
+        if not (torrents := self.get_torrent_list()):
+            print("✗ No torrents found in real-debrid!")
+            return
+        
+        hash_dict = {}
+        stats = {'duplicates': 0, 'started': 0}
+        
+        for torrent in torrents:
+            torrent_hash = torrent.get('hash')
+            
+            # Handle duplicate torrents
+            if torrent_hash in hash_dict:
+                if self.delete_torrent(torrent.get('id')):
+                    stats['duplicates'] += 1
+                    print(f"✓ Deleted duplicate: {torrent.get('filename', 'Unknown')}")
+                continue
+                
+            # Store unique torrent and check if it needs to be started
+            hash_dict[torrent_hash] = torrent
+            if torrent.get('status') not in ['downloaded', 'downloading']:
+                if self.start_magnet_in_debrid(torrent.get('id')):
+                    stats['started'] += 1
+                    print(f"✓ Started torrent: {torrent.get('filename', 'Unknown')}")
+        
+        print(f"✓ Torrent cleanup finished!")
+        print(f"Total: {len(torrents)} | Duplicates: {stats['duplicates']} | "
+              f"Needed Start: {stats['started']} | Remaining: {len(hash_dict)}")
+
+
 
 
 

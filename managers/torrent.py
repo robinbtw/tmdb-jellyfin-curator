@@ -83,9 +83,6 @@ class TorrentManager:
                 seeders = int(row.find_all('td')[5].text)      
                 name_lower = link.text.lower();
 
-                # Check if is movie
-                
-
                 # Check for 1080p or bluray, and exclude samples, telesync, and cam
                 if (seeders >= 5 and "1080p" in name_lower and
                     "sample" not in name_lower and
@@ -98,7 +95,7 @@ class TorrentManager:
 
         if potential_torrents:
             # Sort by seeders and take our limit
-            print(f"✓ Found {len(potential_torrents)} torrents on Nyaa!")
+            # print(f"✓ Found {len(potential_torrents)} torrents on Nyaa!")
             top_torrents = sorted(potential_torrents, key=lambda x: x[0], reverse=True)[:limit]
             for torrent in top_torrents:
                 magnet = self.get_magnet_link(torrent[1])
@@ -113,7 +110,7 @@ class TorrentManager:
         if results:
             return results
         else:
-            print("✗ No torrents found on Nyaa")
+            # print("✗ No torrents found on Nyaa")
             return None
 
     def search_1337x(self, query, limit=3):
@@ -156,7 +153,7 @@ class TorrentManager:
         # Sort by seeders and take our limit
         if potential_torrents:
             top_torrents = sorted(potential_torrents, key=lambda x: x[0], reverse=True)[:limit]
-            print(f"✓ Found {len(top_torrents)} torrents on 1337x!")
+            # print(f"✓ Found {len(top_torrents)} torrents on 1337x!")
             for torrent in top_torrents:
                 magnet = self.get_magnet_link(torrent[1])
                 if True:
@@ -170,7 +167,7 @@ class TorrentManager:
         if results:
             return results
         else:
-            print("✗ No torrents found on 1337x")
+            # print("✗ No torrents found on 1337x")
             return None
 
     def search_yts(self, query, limit=3):
@@ -198,7 +195,6 @@ class TorrentManager:
         
         movies = json.get('data', {}).get('movies', [])
         if not movies:
-            print("✗ No movies found on YTS")
             return None
         
         # Find the best matching movie
@@ -212,7 +208,7 @@ class TorrentManager:
                 # Get all 1080p torrents
                 potential_torrents = [t for t in torrents if t['quality'] == '1080p']
                 
-                print(f"✓ Found {len(potential_torrents)} torrents on YTS!")
+                # print(f"✓ Found {len(potential_torrents)} torrents on YTS!")
                 for torrent in potential_torrents:
                     hash = torrent.get('hash')
                     if hash:
@@ -240,16 +236,18 @@ class TorrentManager:
         if results:
             return results
         else:
-            print("✗ No torrents found on YTS")
+            # print("✗ No torrents found on YTS")
             return None
         
     def search_all_sites(self, query):
         """Searches all configured torrent sites and returns a sorted list of results."""
-        result = query.replace(' ', '+')
+        # Clean query: remove special characters except '+', convert to lowercase
+        result = re.sub(r'[^a-zA-Z0-9\s+]', '', query)
+        result = result.replace(' ', '+')
 
         torrent_results = []
         for site in [self.search_1337x, self.search_yts]:
-            print(f"Searching on {site.__name__.split('_')[1]}...")
+            # print(f"Searching on {site.__name__.split('_')[1]}...")
             site_results = site(result)
             if site_results:
                 torrent_results.extend(site_results)

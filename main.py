@@ -126,12 +126,13 @@ def process_movie_parallel(movie):
     if torrents:
         for torrent in torrents:
             magnet = torrent.magnet
-            result = g_debrid.add_magnet_to_debrid(magnet)
+            result, id = g_debrid.add_magnet_to_debrid(magnet)
             if result:
+                g_debrid.start_magnet_in_debrid(id)
                 print(f"✓ Added {title} {release_date} to debrid!")
                 return True
     else:
-        print(f"✗ Failed to proccess {title}")
+        print(f"✗ Failed to proccess {title}: no torrents found!")
         return False
     
 def add_movie_to_collection_parallel(movie, collection_id):
@@ -172,10 +173,16 @@ def main():
     parser.add_argument("-l", "--limit", type=int, default=50, help="Limit the number of movies to search for!")
     parser.add_argument("-b", "--bypass", action="store_true", help="Bypass all input prompts and default to 'yes'")
     parser.add_argument("-r", "--refresh", action="store_true", help="Refresh/Sync collections!")
+    parser.add_argument("-c", "--cleanup", action="store_true", help="Cleanup libraries!")
 
     # Warning: Increasing workers may cause rate limiting on some APIs
     parser.add_argument("-w", "--workers", type=int, default=1, help="Number of workers to use for processing!")
     args = parser.parse_args()
+
+    if args.cleanup:
+        g_debrid.cleanup_debrid_library() # Cleanup debrid library
+        g_jellyfin.cleanup_jellyfin_library() # Cleanup jellyfin library
+        quit()
 
     if args.refresh:
         print("Refreshing all collections...")
@@ -202,7 +209,7 @@ def main():
                         # Wait for all tasks to complete
                         concurrent.futures.wait(futures)
                         successful = sum(1 for future in futures if future.result())
-                        print(f"\nAdded {successful}/{len(movies)} movies ({name}) successfully!")
+                        print(f"\n✓ Processed {successful}/{len(movies)} movies ({name}) successfully!")
 
             keyword_id, _ = search_for_a_keyword(name, name)
             if keyword_id:
@@ -215,7 +222,7 @@ def main():
                         # Wait for all tasks to complete
                         concurrent.futures.wait(futures)
                         successful = sum(1 for future in futures if future.result())
-                        print(f"\nAdded {successful}/{len(movies)} movies ({name}) successfully!")
+                        print(f"\n✓ Added {successful}/{len(movies)} movies ({name}) successfully!")
         
         print("✓ Refreshed all collections successfully!")
         quit()
@@ -245,7 +252,7 @@ def main():
                 # Wait for all tasks to complete
                 concurrent.futures.wait(futures)
                 successful = sum(1 for future in futures if future.result())
-                print(f"\nProcessed {successful}/{len(movies)} movies ({name}) successfully!")
+                print(f"\n✓ Processed {successful}/{len(movies)} movies successfully!")
 
             # Wait for zurg to refresh/sync movies
             waiting_animation_spinner(f"Waiting for zurg sync", delay=0.1, iterations=75)
@@ -269,7 +276,8 @@ def main():
                 # Wait for all tasks to complete
                 concurrent.futures.wait(futures)
                 successful = sum(1 for future in futures if future.result())
-                print(f"\nAdded {successful}/{len(movies)} movies to collection successfully!")
+                print(f"\n✓ Added {successful}/{len(movies)} movies to collection successfully!")
+        
     else:
         print("✗ Error: No movies found quiting program!")
         quit()          
