@@ -65,14 +65,14 @@ python main.py -k "keyword" -l limit -w workers
 
 Arguments:
 - `-k, --keyword`: Search keyword (use quotes for multiple words)
-- `-p, --person`: Search by Cast, Crew, Writer, etc
+- `-p, --person`: Search by Cast, Crew, Writer, etc (use quotes for multiple words)
 - `-l, --limit`: Maximum number of movies to process (default: 50)
 - `-w, --workers`: Number of parallel workers (default: 1)
 
 Example:
 ```bash
-python main.py -p "anne hathaway" -w 3 # anne hathaway movies (default 50 results, 3 workers)
-python ma1n.py -k "racing" # racing movies
+python main.py -p "anne hathaway" -w 3 # anne hathaway movies (default results, 3 workers)
+python ma1n.py -k "racing" # racing movies (default results, workers)
 python main.py -k "time travel" -l 20 # time travel movies (limit 20 results)
 python main.py -k "superhero" -l 50 -w 6 # superhero movies (limit 50 results, 6 workers)
 ```
