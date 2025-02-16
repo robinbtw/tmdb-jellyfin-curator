@@ -86,15 +86,16 @@ class TMDBManager:
         return self._make_request('GET', f'/movie/{movie_id}/similar')
     
     def discover_movies(self, params=None):
-        """Discover movies using various filters."""
+        """Discover movies using various filters."""       
         default_params = {
             'sort_by': 'popularity.desc',
-            'vote_count.gte': 1000,  # Only well-reviewed movies
+            'vote_count.gte': 1000,
             'include_adult': False,
             'language': 'en-US'
         }
+        
         if params:
             default_params.update(params)
         return self._make_request('GET', '/discover/movie', params=default_params)
-
+    
     
