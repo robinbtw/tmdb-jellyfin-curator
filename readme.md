@@ -60,11 +60,15 @@ REAL_DEBRID_API_KEY=your-real-debrid-api-key
 Run the script with command line arguments:
 
 ```bash
-python main.py -k "keyword" -l limit -w workers
+python main.py -c 
+python main.py -r 
+python main.py -m "mood" -l limit -w workers 
+python main.py -k "keyword" -l limit -w workers 
 python main.py -p "person" -l limit -w workers
 ```
 
 Arguments:
+- `-m, --mood`: Search by mood presets (use quotes for multiple words)
 - `-k, --keyword`: Search keyword (use quotes for multiple words)
 - `-p, --person`: Search by cast, crew, writer, etc (use quotes for multiple words)
 - `-l, --limit`: Maximum number of movies to process (default: 50)
@@ -74,12 +78,13 @@ Arguments:
 
 Example:
 ```bash
-python main.py -c # cleanup duplicates
-python main.py -r # recheck and sync libraries (add missing movies to collections)
 python main.py -p "anne hathaway" -w 3 # anne hathaway movies (default results, 3 workers)
 python ma1n.py -k "racing" # racing movies (default results, workers)
 python main.py -k "time travel" -l 20 # time travel movies (limit 20 results)
 python main.py -k "superhero" -l 50 -w 6 # superhero movies (limit 50 results, 6 workers)
+python main.py -m "nostalgia"
+python main.py -m "mind bending"
+python main.py -m "critically acclaimed"
 ```
 
 ## Supported Torrent Sites

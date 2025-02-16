@@ -19,20 +19,7 @@ from managers.tmdb import TMDBManager
 from managers.jellyfin import JellyfinManager
 from managers.debrid import RealDebridManager
 from managers.torrent import TorrentManager
-
-# Define generic keywords
-g_generic_keywords = [
-    "horror", "comedy", 
-    "drama", "adventure", "fantasy",
-    "mystery", "crime", "thriller", "romance",
-    "animation", "documentary", "family", "horror", "western", "war",
-    "history", "biography", "sport", "reality"]
-
-# Define specific keywords
-g_specific_keywords  = [
-    "antihero", "female protagonist", "superhero", 
-    "mcu", "disaster", "live action", "based on young adult novel",
-    "based on video game"]
+from constants import GENERIC_KEYWORDS, SPECIFIC_KEYWORDS, MOVIE_PRESETS
 
 # Initialize managers
 g_tmdb = TMDBManager()
@@ -45,8 +32,9 @@ def search_for_a_keyword(keyword, title=""):
     results = g_tmdb.get_keyword(keyword).get("results", [])
 
     if not results:
-        print("No results found. Try:")
-        print(f"`{random.choice(g_specific_keywords)}`, `{random.choice(g_generic_keywords)}`")
+        print("✗ No results found. Try:")
+        print(f"`{random.choice(SPECIFIC_KEYWORDS)}`, `{random.choice(GENERIC_KEYWORDS)}`")
+        return None, None
   
     try:
         if title:
@@ -92,8 +80,8 @@ def get_movies_by_person(id, limit=50):
     response = g_tmdb.get_movie_credits(id)
     credits = response.get("cast", [])
  
-    # Sort by vote average and return top movies
-    return sorted(credits[:limit], key=lambda x: x.get('vote_average', 0), reverse=True)
+    # Sort all results by popularity before returning
+    return sorted(credits[:limit], key=lambda x: x.get('popularity', 0), reverse=True)
 
 def get_movies_by_keyword(id, limit=50):
     """Get movies by keyword ID from TMDB."""
@@ -109,10 +97,27 @@ def get_movies_by_keyword(id, limit=50):
         results.extend(response.get("results", [])) # Append results from next pages
 
         if len(results) >= limit:
-            return sorted(results[:limit], key=lambda x: x.get('vote_average', 0), reverse=True)
+            return sorted(results[:limit], key=lambda x: x.get('popularity', 0), reverse=True)
 
-    # Sort all results by vote average before returning
-    return sorted(results, key=lambda x: x.get('vote_average', 0), reverse=True)
+    # Sort all results by popularity before returning
+    return sorted(results, key=lambda x: x.get('popularity', 0), reverse=True)
+
+def get_movies_by_mood(preset_name, limit=50):
+    """Get movies matching a specific preset."""
+    if preset_name not in MOVIE_PRESETS:
+        print("✗ No results found! Try:")
+        print(f"`{random.choice(list(MOVIE_PRESETS.keys()))}`, `{random.choice(list(MOVIE_PRESETS.keys()))}`")
+        return None, None
+
+    results = g_tmdb.discover_movies(MOVIE_PRESETS[preset_name])
+    if not results:
+        return None, None
+
+    movies = results.get('results', [])[:limit]
+    if not movies:
+        return None, None
+
+    return sorted(movies, key=lambda x: x.get('popularity', 0), reverse=True), preset_name
 
 def process_movie_parallel(movie):
     """Process a movie in parallel by adding it to real-debrid."""
@@ -120,7 +125,7 @@ def process_movie_parallel(movie):
     release_date = movie.get("release_date")[:4]
     search_term = f"{title} {release_date}"
 
-    print(f"Processing {title} {release_date}...")
+    print(f"• Processing {title} ({release_date})...")
     torrents = g_torrent.search_all_sites(search_term)
 
     if torrents:
@@ -129,7 +134,7 @@ def process_movie_parallel(movie):
             result, id = g_debrid.add_magnet_to_debrid(magnet)
             if result:
                 g_debrid.start_magnet_in_debrid(id)
-                print(f"✓ Added {title} {release_date} to debrid!")
+                print(f"✓ Added {title} ({release_date}) to debrid!")
                 return True
     else:
         print(f"✗ Failed to proccess {title}: no torrents found!")
@@ -168,6 +173,7 @@ def main():
 
     # Set up argumaent parser
     parser = argparse.ArgumentParser(description="Search for movies by keyword or person!")
+    parser.add_argument("-m", "--mood", type=str, help="Get movie recommendations by mood/theme")
     parser.add_argument("-k", "--keyword", type=str, help="Search for movies by keyword!")
     parser.add_argument("-p", "--person", type=str, help="Search for movies by person!")
     parser.add_argument("-l", "--limit", type=int, default=50, help="Limit the number of movies to search for!")
@@ -227,7 +233,9 @@ def main():
         print("✓ Refreshed all collections successfully!")
         quit()
 
-    if args.person:
+    if args.mood:
+        movies, name = get_movies_by_mood(args.mood, args.limit)  
+    elif args.person:
         person_id, name = search_for_a_person(args.person)
         if person_id:
             movies = get_movies_by_person(person_id, args.limit)
