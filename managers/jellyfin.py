@@ -1,6 +1,6 @@
 """
 Filename: jelyfin.py
-Date: 2023-10-05
+Date: 02-17-2025
 Author: robinbtw
 
 Description:
@@ -85,7 +85,7 @@ class JellyfinManager:
                 # Try exact match first
                 for item in items:
                     if item["Name"].lower() == movie_name.lower():
-                        return item["Id"]
+                        return item
             return None
         
         except requests.exceptions.RequestException as e:

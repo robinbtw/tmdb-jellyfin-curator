@@ -1,6 +1,6 @@
 """
 Filename: tmdb.py
-Date: 2023-10-05
+Date: 02-17-2025
 Author: robinbtw
 
 Description:
@@ -54,6 +54,10 @@ class TMDBManager:
     def get_movie_details(self, movie_id):
         """Retrieves details for a specific movie by ID from TMDB."""
         return self._make_request('GET', f'/movie/{movie_id}')
+    
+    def get_movie_release_dates(self, movie_id):
+        """Retrieves release dates for a specific movie by ID from TMDB."""
+        return self._make_request('GET', f'/movie/{movie_id}/release_dates')
 
     def get_movie_external_ids(self, movie_id):
         """Retrieves external IDs for a specific movie by ID from TMDB."""

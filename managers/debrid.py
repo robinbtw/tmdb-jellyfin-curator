@@ -1,6 +1,6 @@
 """
 Filename: debrid.py
-Date: 2023-10-05
+Date: 02-17-2025
 Author: robinbtw
 
 Description:
@@ -25,7 +25,7 @@ class RealDebridManager:
         self.api_url = os.getenv('REAL_DEBRID_API_URL')
         self.api_key = os.getenv('REAL_DEBRID_API_KEY')
         self.headers = { 'Authorization': f'Bearer {self.api_key}' }
-        self._inform_user()
+        #self._inform_user()
 
     def _inform_user(self):
         if self.get_real_debrid_user():
@@ -35,10 +35,6 @@ class RealDebridManager:
             print()
         else:
             print("✗ Real-Debrid API credentials not found! Please check your .env file.")
-            print()
-
-        if not self.get_premium_status():
-            print("✗ No premium: premium is highly recommended!")
             print()
 
     def _make_request(self, method, endpoint, params=None, data=None, timeout=5):

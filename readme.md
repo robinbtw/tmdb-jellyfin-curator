@@ -42,6 +42,9 @@ pip install -r requirements.txt
 
 3. Create a `.env` file in the root directory with your configuration:
 ```env
+# Movie quality. Select one: 720p, 1080p, or 2160p
+MOVIE_QUALITY=1080p 
+
 # Jellyfin Configuration
 JELLYFIN_SERVER=http://localhost:8096
 JELLYFIN_API_KEY=your-jellyfin-api-key
@@ -53,6 +56,10 @@ TMDB_API_URL=https://api.themoviedb.org/3
 # Real-Debrid Configuration
 REAL_DEBRID_API_URL=https://api.real-debrid.com/rest/1.0
 REAL_DEBRID_API_KEY=your-real-debrid-api-key
+
+# Tunarr Configuration
+TUNARR_SERVER=http://localhost:8000
+TUNARR_TRANSCODE_CONFIG_ID=your-tunarr-transcode-config-id
 ```
 
 ## Usage
@@ -62,13 +69,11 @@ Run the script with command line arguments:
 ```bash
 python main.py -c 
 python main.py -r 
-python main.py -m "mood" -l limit -w workers 
 python main.py -k "keyword" -l limit -w workers 
 python main.py -p "person" -l limit -w workers
 ```
 
 Arguments:
-- `-m, --mood`: Search by mood presets (use quotes for multiple words)
 - `-k, --keyword`: Search keyword (use quotes for multiple words)
 - `-p, --person`: Search by cast, crew, writer, etc (use quotes for multiple words)
 - `-l, --limit`: Maximum number of movies to process (default: 50)
@@ -82,9 +87,6 @@ python main.py -p "anne hathaway" -w 3 # anne hathaway movies (default results, 
 python ma1n.py -k "racing" # racing movies (default results, workers)
 python main.py -k "time travel" -l 20 # time travel movies (limit 20 results)
 python main.py -k "superhero" -l 50 -w 6 # superhero movies (limit 50 results, 6 workers)
-python main.py -m "nostalgia"
-python main.py -m "mind bending"
-python main.py -m "critically acclaimed"
 ```
 
 ## Supported Torrent Sites

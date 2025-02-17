@@ -19,13 +19,32 @@ from managers.tmdb import TMDBManager
 from managers.jellyfin import JellyfinManager
 from managers.debrid import RealDebridManager
 from managers.torrent import TorrentManager
-from constants import GENERIC_KEYWORDS, SPECIFIC_KEYWORDS, MOVIE_PRESETS
+from managers.tunarr import TunarrManager, TunnarEntry
+
+# Generic movie keywords
+g_generic_keywords = [
+    "horror", "comedy", 
+    "drama", "adventure", "fantasy",
+    "mystery", "crime", "thriller", "romance",
+    "animation", "documentary", "family", "horror", "western", "war",
+    "history", "biography", "sport", "reality"
+]
+
+# Specific movie keywords
+g_specific_keywords = [
+    "antihero", "female protagonist", "superhero", 
+    "mcu", "disaster", "live action", "based on young adult novel",
+    "based on video game", "based on comic", "based on novel", "based on true story",
+    "time travel", "space", "alien", "zombie", "vampire", "werewolf", "robot", "dystopia",
+    "post-apocalyptic", "heist", "con artist", "spy", "mafia", "gangster", "interspecies romance",
+]
 
 # Initialize managers
 g_tmdb = TMDBManager()
 g_torrent = TorrentManager()
 g_debrid = RealDebridManager()
 g_jellyfin = JellyfinManager()
+g_tunarr = TunarrManager()
 
 def search_for_a_keyword(keyword, title=""):
     """Search for a keyword on TMDB and return the ID and name."""
@@ -33,7 +52,7 @@ def search_for_a_keyword(keyword, title=""):
 
     if not results:
         print("✗ No results found. Try:")
-        print(f"`{random.choice(SPECIFIC_KEYWORDS)}`, `{random.choice(GENERIC_KEYWORDS)}`")
+        print(f"`{random.choice(g_specific_keywords)}`, `{random.choice(g_generic_keywords)}`")
         return None, None
   
     try:
@@ -102,23 +121,6 @@ def get_movies_by_keyword(id, limit=50):
     # Sort all results by popularity before returning
     return sorted(results, key=lambda x: x.get('popularity', 0), reverse=True)
 
-def get_movies_by_mood(preset_name, limit=50):
-    """Get movies matching a specific preset."""
-    if preset_name not in MOVIE_PRESETS:
-        print("✗ No results found! Try:")
-        print(f"`{random.choice(list(MOVIE_PRESETS.keys()))}`, `{random.choice(list(MOVIE_PRESETS.keys()))}`")
-        return None, None
-
-    results = g_tmdb.discover_movies(MOVIE_PRESETS[preset_name])
-    if not results:
-        return None, None
-
-    movies = results.get('results', [])[:limit]
-    if not movies:
-        return None, None
-
-    return sorted(movies, key=lambda x: x.get('popularity', 0), reverse=True), preset_name
-
 def process_movie_parallel(movie):
     """Process a movie in parallel by adding it to real-debrid."""
     title = movie.get("title")
@@ -144,14 +146,27 @@ def add_movie_to_collection_parallel(movie, collection_id):
     """Add a movie to a jellyfin collection in parallel."""
     title = movie.get("title")
     year = movie.get("release_date")[:4]
-    movie_id = g_jellyfin.get_jellyfin_movie(title)
+    jellyfin_movie = g_jellyfin.get_jellyfin_movie(title)
 
-    if movie_id:
-        g_jellyfin.add_movie_to_collection(movie_id, collection_id)
+    if jellyfin_movie:
+        id = jellyfin_movie.get('Id')
+        g_jellyfin.add_movie_to_collection(id, collection_id)
         print(f"✓ Added {title} {year} to collection!")
         return True
     
     print(f"✗ Failed to add {title} {year} to collection!")
+    return False
+
+def add_program_parallel(movie, channel):
+    """Add a movie to Tunarr channel programming in parallel."""
+    source = g_jellyfin.get_jellyfin_movie(movie.get("title"))
+    if source:
+        details = g_tmdb.get_movie_details(movie.get("id"))
+        if details:
+            g_tunarr.add_programming(channel['id'], TunnarEntry(details, source.get("Id")))
+            print(f"✓ Added {movie.get('title')} to Tunarr channel!")
+            return True
+    print(f"✗ Failed to add {movie.get('title')} to Tunarr channel!")
     return False
 
 def waiting_animation_spinner(message="Processing", delay=0.1, iterations=3):
@@ -170,10 +185,10 @@ def main():
     name = None
     movies = None
     group_id = None
+    person_id = None
 
     # Set up argumaent parser
     parser = argparse.ArgumentParser(description="Search for movies by keyword or person!")
-    parser.add_argument("-m", "--mood", type=str, help="Get movie recommendations by mood/theme")
     parser.add_argument("-k", "--keyword", type=str, help="Search for movies by keyword!")
     parser.add_argument("-p", "--person", type=str, help="Search for movies by person!")
     parser.add_argument("-l", "--limit", type=int, default=50, help="Limit the number of movies to search for!")
@@ -201,7 +216,7 @@ def main():
         # Sync/refresh all collections 
         # (use more workers for faster processing)
         for item in collections:
-            id = item.get("Id")
+            source = item.get("Id")
             name = item.get("Name")     
 
             person_id, _ = search_for_a_person(name)
@@ -210,7 +225,7 @@ def main():
                 if movies:
                     # Sync movies to collection in parallel
                     with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
-                        futures = [executor.submit(add_movie_to_collection_parallel, movie, id) for movie in movies]
+                        futures = [executor.submit(add_movie_to_collection_parallel, movie, source) for movie in movies]
                         
                         # Wait for all tasks to complete
                         concurrent.futures.wait(futures)
@@ -223,7 +238,7 @@ def main():
                 if movies:
                     # Sync movies to collection in parallel
                     with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
-                        futures = [executor.submit(add_movie_to_collection_parallel, movie, id) for movie in movies]
+                        futures = [executor.submit(add_movie_to_collection_parallel, movie, source) for movie in movies]
                         
                         # Wait for all tasks to complete
                         concurrent.futures.wait(futures)
@@ -233,9 +248,7 @@ def main():
         print("✓ Refreshed all collections successfully!")
         quit()
 
-    if args.mood:
-        movies, name = get_movies_by_mood(args.mood, args.limit)  
-    elif args.person:
+    if args.person:
         person_id, name = search_for_a_person(args.person)
         if person_id:
             movies = get_movies_by_person(person_id, args.limit)
@@ -285,6 +298,21 @@ def main():
                 concurrent.futures.wait(futures)
                 successful = sum(1 for future in futures if future.result())
                 print(f"\n✓ Added {successful}/{len(movies)} movies to collection successfully!")
+
+        if args.bypass or input(f"\nCreate a tunarr channel for movies? ({name}) (y/n): ").lower() == 'y':
+            # Normalize channel numbers
+            g_tunarr.normalize_channels() 
+            # Create a tunarr channel for the keyword
+            channel = g_tunarr.create_tunarr_channel(name, "Filmography" if person_id else "Movies")
+
+            # Process programming additions in parallel
+            with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
+                futures = [executor.submit(add_program_parallel, movie, channel) for movie in movies]
+                
+                # Wait for all tasks to complete
+                concurrent.futures.wait(futures)
+                successful = sum(1 for future in futures if future.result())
+                print(f"\n✓ Added {successful}/{len(movies)} movies to Tunarr channel successfully!")
         
     else:
         print("✗ Error: No movies found quiting program!")
@@ -292,3 +320,4 @@ def main():
         
 if __name__ == "__main__":
     main()
+    

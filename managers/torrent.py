@@ -1,6 +1,6 @@
 """
 Filename: torrent.py
-Date: 2023-10-05
+Date: 02-17-2025
 Author: robinbtw
 
 Description:
@@ -10,6 +10,7 @@ It includes classes to represent search results, and a manager class to search a
 
 # Import standard libraries
 import re
+import os
 import requests
 from dotenv import load_dotenv
 from bs4 import BeautifulSoup
@@ -36,27 +37,32 @@ class TorrentManager:
         self.nyaa_url = "https://nyaa.si/?f=0&c=1_0&q={}&s=seeders&o=desc" 
         self.x1337_url = "https://1337x.to/search/{}/1/"
         self.yts_url = "https://yts.mx/api/v2/list_movies.json?query_term={}"
-        self.headers = {'User-Agent': 'Mozilla/5.0'}  # Some sites require a User-Agent
+        self.headers = {'User-Agent': 'Mozilla/5.0'}
+        self.quality = os.getenv('MOVIE_QUALITY')
 
-    def get_magnet_link(self, torrent_url):
+    def _make_request(self, method, url, is_json=False):
+        """Internal helper function to make web requests."""
+        try:
+            response = requests.request(method, url, headers=self.headers)
+            response.raise_for_status()
+            return response.json() if is_json else response.text
+        except requests.exceptions.RequestException as e:
+            print(f"✗ Web request failed: {e}")
+            return None
+
+    def _get_magnet_link(self, torrent_url):
         """Get magnet link from torrent URL."""
-        response = requests.get(url=torrent_url, headers=self.headers)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        magnet_link = soup.find('a', href=re.compile(r'^magnet:'))['href']
-        return magnet_link
-
+        html = self._make_request('GET', torrent_url)
+        if html:
+            soup = BeautifulSoup(html, 'html.parser')
+            magnet_link = soup.find('a', href=re.compile(r'^magnet:'))
+            return magnet_link['href'] if magnet_link else None   
+        return None
+    
     def search_nyaa(self, query, limit=3):
         """Searches Nyaa.si for torrents."""
-        try:
-            url = self.nyaa_url.format(query)
-            response = requests.get(url, headers=self.headers)
-            response.raise_for_status()
-            # Parse the HTML content
-            results = self._parse_nyaa_results(response.text, query, limit)
-            return results
-        except requests.exceptions.RequestException as e:
-            print(f"✗ Nyaa search failed: {e}")
-            return []
+        html = self._make_request('GET', self.nyaa_url.format(query))
+        return self._parse_nyaa_results(html, query, limit) if html else []
 
     def _parse_nyaa_results(self, html, query, limit):
         """Parses Nyaa.si search results from HTML."""
@@ -84,8 +90,8 @@ class TorrentManager:
                 name_lower = link.text.lower();
 
                 # Check for 1080p or bluray, and exclude samples, telesync, and cam
-                if (seeders >= 5 and "1080p" in name_lower and
-                    "sample" not in name_lower and
+                if (seeders >= 5 and self.quality in name_lower and
+                    "sample" not in name_lower and "hdts" not in name_lower and
                     "telesync" not in name_lower and "cam" not in name_lower):
 
                     torrent_href = "https://nyaa.si" + row.find_all('td')[1].find('a')['href']
@@ -98,7 +104,7 @@ class TorrentManager:
             # print(f"✓ Found {len(potential_torrents)} torrents on Nyaa!")
             top_torrents = sorted(potential_torrents, key=lambda x: x[0], reverse=True)[:limit]
             for torrent in top_torrents:
-                magnet = self.get_magnet_link(torrent[1])
+                magnet = self._get_magnet_link(torrent[1])
                 if magnet:
                     results.append(TorrentResult(
                         title=torrent[2],
@@ -115,17 +121,8 @@ class TorrentManager:
 
     def search_1337x(self, query, limit=3):
         """Searches 1337x.to for torrents."""
-
-        try:
-            url = self.x1337_url.format(query)
-            response = requests.get(url, headers=self.headers)
-            response.raise_for_status()
-            # Parse the HTML content
-            results = self._parse_1337x_results(response.text, limit)
-            return results
-        except requests.exceptions.RequestException as e:
-            print(f"✗ 1337x search failed: {e}")
-            return []
+        html = self._make_request('GET', self.x1337_url.format(query))
+        return self._parse_1337x_results(html, limit) if html else []
 
     def _parse_1337x_results(self, html, limit):
         """Parses 1337x.to search results from HTML."""
@@ -142,11 +139,12 @@ class TorrentManager:
             name = row.find_all('td')[0].find_all('a')[-1].text
             seeders = int(row.find_all('td')[1].text)       
             name_lower = name.lower()
+                    
+            if (seeders >= 5 and 
+                self.quality in name_lower 
+                and "sample" not in name_lower and "hdts" not in name_lower
+                and "telesync" not in name_lower and "cam" not in name_lower):
 
-            if (seeders >= 5 and "1080p" in name_lower and
-                "sample" not in name_lower and
-                "telesync" not in name_lower and "cam" not in name_lower):
-  
                 torrent_href = "https://1337x.to" + row.find_all('td')[0].find_all('a')[-1]['href']
                 potential_torrents.append((seeders, torrent_href, name))
 
@@ -155,7 +153,7 @@ class TorrentManager:
             top_torrents = sorted(potential_torrents, key=lambda x: x[0], reverse=True)[:limit]
             # print(f"✓ Found {len(top_torrents)} torrents on 1337x!")
             for torrent in top_torrents:
-                magnet = self.get_magnet_link(torrent[1])
+                magnet = self._get_magnet_link(torrent[1])
                 if True:
                     results.append(TorrentResult(
                         title=torrent[2],
@@ -172,16 +170,8 @@ class TorrentManager:
 
     def search_yts(self, query, limit=3):
         """Searches YTS.mx for torrents."""
-        try:
-            url = self.yts_url.format(query)
-            response = requests.get(url, headers=self.headers)
-            response.raise_for_status()
-            # Parse the HTML content
-            results = self._parse_yts_results(response.json(), query, limit)
-            return results
-        except requests.exceptions.RequestException as e:
-            print(f"✗ YTS search failed: {e}")
-            return []
+        json_response = self._make_request('GET', self.yts_url.format(query), is_json=True)
+        return self._parse_yts_results(json_response, query, limit) if json_response else []
 
     def _parse_yts_results(self, json, query, limit):
         """Parses YTS.mx search results from HTML."""
@@ -206,7 +196,7 @@ class TorrentManager:
                 torrents = movie.get('torrents', [])
                 
                 # Get all 1080p torrents
-                potential_torrents = [t for t in torrents if t['quality'] == '1080p']
+                potential_torrents = [t for t in torrents if t['quality'] == self.quality]
                 
                 # print(f"✓ Found {len(potential_torrents)} torrents on YTS!")
                 for torrent in potential_torrents:
