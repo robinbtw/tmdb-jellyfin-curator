@@ -87,21 +87,12 @@ class JellyfinManager:
                     if item["Id"].lower() == movie_id.lower():
                         return item["Id"]
         return None
-              
-    def _delete_jellyfin_movie(self, movie_id):
+
+    def delete_movie(self, movie_id):
         """Removes a movie from the Jellyfin library."""
         self._make_request('DELETE', f"/Items/{movie_id}")
 
-    def _remove_movie_from_collection(self, movie_id, collection_id):
-        """Removes a movie from a Jellyfin collection."""
-        self._make_request('DELETE', f"/Collections/{collection_id}/Items/{movie_id}")
-
-    def get_all_jellyfin_collections(self):
-        """Retrieves all Jellyfin collections."""
-        params = {'recursive': 'true', 'includeItemTypes': 'BoxSet'}
-        return self._make_request('GET', "/Items", params=params)
-
-    def get_jellyfin_movie(self, movie_name):
+    def get_movie(self, movie_name):
         """Retrieves item ID for a movie by name from the Jellyfin movies library."""
         params = {'includeItemTypes': 'Movie', 'recursive': 'true', 'searchTerm': movie_name}
         response = self._make_request('GET', "/Items", params=params)
@@ -114,7 +105,31 @@ class JellyfinManager:
                     if item["Name"].lower() == movie_name.lower():
                         return item
         return None
+
+    def get_all_collections(self):
+        """Retrieves all Jellyfin collections."""
+        params = {'recursive': 'true', 'includeItemTypes': 'BoxSet'}
+        return self._make_request('GET', "/Items", params=params)
     
+    def get_all_duplicate_movies(self):
+        """Retrieves duplicate movies from Jellyfin by name."""
+        movies = self._get_all_movies().get("Items", [])
+        seen = {}
+        duplicates = []
+
+        for movie in movies:
+            name = movie.get('Name')
+            if name in seen:
+                duplicates.append({
+                    'name': name,
+                    'original_id': seen[name],
+                    'duplicate_id': movie.get('Id')
+                })
+            else:
+                seen[name] = movie.get('Id')
+
+        return duplicates
+        
     def add_movie_to_collection(self, movie_id, collection_id):
         """Adds a movie to a Jellyfin collection."""
         if self._is_movie_in_collection(movie_id, collection_id):
@@ -123,7 +138,7 @@ class JellyfinManager:
         params = {'ids': movie_id}
         self._make_request('POST', f"/Collections/{collection_id}/Items", params=params)
 
-    def create_jellyfin_collection(self, collection_name):
+    def create_collection(self, collection_name):
         """Creates a new collection in Jellyfin if it doesn't already exist."""
         collection = self._get_jellyfin_collection(collection_name)
         if collection:
@@ -143,27 +158,7 @@ class JellyfinManager:
             if response:
                 print("Starting library scan...")
                 return True
-      
-    def cleanup_jellyfin_library(self):
-        """Removes duplicate movies from the Jellyfin library."""
-        print("Cleaning up jellyfin library...")
-        movies = self._get_all_movies().get("Items", [])
-        name_dict = {}
 
-        duplicates = 0 
-        for movie in movies:
-            if movie.get('Name') in name_dict:     
-                duplicates += 1           
-                self._delete_jellyfin_movie(movie.get('Id'))
-                print(f"✓ Deleted duplicate movie: { movie.get('Name') }")
-                continue
-
-            name_dict[movie.get('Name')] = movie
-        
-        print("✓ Jellyfin cleanup finished!")
-        print(f"Total: {len(movies)} | Duplicates: {duplicates} | "
-              f"Remaining: {len(name_dict)}")
-        
 
             
 

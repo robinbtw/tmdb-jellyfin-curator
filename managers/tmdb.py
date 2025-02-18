@@ -100,6 +100,5 @@ class TMDBManager:
         
         if params:
             default_params.update(params)
+            
         return self._make_request('GET', '/discover/movie', params=default_params)
-    
-    

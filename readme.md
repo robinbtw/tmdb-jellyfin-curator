@@ -68,7 +68,6 @@ Run the script with command line arguments:
 
 ```bash
 python main.py -c 
-python main.py -r 
 python main.py -k "keyword" -l limit -w workers 
 python main.py -p "person" -l limit -w workers
 ```
@@ -77,13 +76,12 @@ Arguments:
 - `-k, --keyword`: Search keyword (use quotes for multiple words)
 - `-p, --person`: Search by cast, crew, writer, etc (use quotes for multiple words)
 - `-l, --limit`: Maximum number of movies to process (default: 50)
-- `-w, --workers`: Number of parallel workers (default: 1)
-- `-r, --refresh`: Refresh/sync collections. (generate/update collections)
+- `-w, --workers`: Number of parallel workers (default: 3, reduce if to many requests)
 - `-c, --cleanup`: Remove duplicate hashes and movies.
 
 Example:
 ```bash
-python main.py -p "anne hathaway" -w 3 # anne hathaway movies (default results, 3 workers)
+python main.py -p "anne hathaway" -w 10 # anne hathaway movies (default results, 10 workers)
 python ma1n.py -k "racing" # racing movies (default results, workers)
 python main.py -k "time travel" -l 20 # time travel movies (limit 20 results)
 python main.py -k "superhero" -l 50 -w 6 # superhero movies (limit 50 results, 6 workers)

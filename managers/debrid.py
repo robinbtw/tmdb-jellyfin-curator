@@ -30,12 +30,9 @@ class RealDebridManager:
         self.api_key = os.getenv('REAL_DEBRID_API_KEY')
         self.headers = { 'Authorization': f'Bearer {self.api_key}' }
         self.proxy_manager = ProxyManager()
-        self.torrent_cache = None
-        self.torrent_cache_timestamp = 0
-        self.torrent_cache_ttl = 300 # 5 minutes
 
     def _inform_user(self):
-        if self._get_real_debrid_user():
+        if self._get_user():
             print("✓ Real-Debrid API credentials found!")
             print(f"- Premium status: {self._get_premium_status()}")
             print(f"- Days left: {self._get_premium_status_days_left()}")
@@ -44,7 +41,7 @@ class RealDebridManager:
             print("✗ Real-Debrid API credentials not found! Please check your .env file.")
             print()
 
-    def _make_request(self, method, endpoint, params=None, data=None, timeout=5):
+    def _make_request(self, method, endpoint, params=None, data=None, timeout=8):
         """Internal helper function to make API requests."""
         url = f"{self.api_url}{endpoint}"
         try:
@@ -62,76 +59,42 @@ class RealDebridManager:
             print(f"✗ API request failed: {e}")
             return None
 
-    def _get_real_debrid_user(self):
-        """Get current user info from Real-Debrid."""
+    def _get_user(self):
+        """Get current user info from real-debrid."""
         return self._make_request('GET', "/user")
 
     def _get_premium_status(self):
         """Check if user has premium status."""
-        user = self._get_real_debrid_user()
+        user = self._get_user()
         if user:
             return user.get('type') == 'premium'
         return False
 
     def _get_premium_status_days_left(self):
         """Get time left for premium status."""
-        user = self._get_real_debrid_user()
+        user = self._get_user()
         if user:
             seconds_left = user.get('premium')
             return seconds_left // 86400
         return None
 
     def _get_torrent_list(self, limit=5000):
-        """Get torrent list from Real-Debrid with caching."""
-        current_time = time.time()
-        
-        # Return cached data if not expired
-        if self.torrent_cache and current_time - self.torrent_cache_timestamp < self.torrent_cache_ttl:
-            return self.torrent_cache
-
-        # Fetch fresh data
+        """Get torrent list from real-debrid."""
         params = {'limit': limit}
-        result = self._make_request('GET', "/torrents", params=params)
-
-        if result is not None:
-            self.torrent_cache = result
-            self.torrent_cache_timestamp = current_time
-
-        return result
+        return self._make_request('GET', "/torrents", params=params)
 
     def _get_downloads(self, limit=100):
-        """Get downloads from Real-Debrid."""
+        """Get downloads from real-debrid."""
         params = {'limit': limit}
         return self._make_request('GET', "/downloads", params=params)
 
     def _get_torrent_info(self, torrent_id):
-        """Get torrent info from Real-Debrid."""
+        """Get torrent info from real-debrid."""
         return self._make_request('GET', f"/torrents/info/{torrent_id}")
-
-    def _is_torrent_cached(self, torrent_id):
-        """Check if torrent is cached in Real-Debrid."""
-        torrent_info = self._get_torrent_info(torrent_id)
-        if torrent_info:
-            return torrent_info.get('status') == 'downloaded'
-        return False  
     
     def _delete_download(self, id):
-        """Delete download in Real-Debrid."""
-        result = self._make_request('DELETE', f"/downloads/delete/{id}")
-        if result:
-            self.torrent_cache = None 
-            self.torrent_cache_timestamp = 0
-            return True
-        return False
-
-    def _delete_torrent(self, id):
-        """Delete torrent in Real-Debrid."""
-        result = self._make_request('DELETE', f"/torrents/delete/{id}")
-        if result:
-            self.torrent_cache = None 
-            self.torrent_cache_timestamp = 0
-            return True
-        return False
+        """Delete download in real-debrid."""
+        return self._make_request('DELETE', f"/downloads/delete/{id}")
     
     def _extract_hash_from_magnet(self, magnet):
         """Extract hash from magnet link."""
@@ -149,6 +112,10 @@ class RealDebridManager:
                     #print("✗ Torrent already exists in debrid!")
                     return True
         return False
+       
+    def delete_torrent(self, id):
+        """Delete torrent in Real-Debrid."""
+        return self._make_request('DELETE', f"/torrents/delete/{id}")
 
     def add_magnet_hash_to_debrid(self, hash):
         """Add magnet by hash to Real-Debrid."""
@@ -165,7 +132,7 @@ class RealDebridManager:
         )
         return self.add_magnet_to_debrid(magnet)
     
-    def start_magnet_in_debrid(self, id):
+    def start_magnet_in_debrid(self, id) -> bool:
         """Start magnet in Real-Debrid."""
         result =  self._make_request('POST', f"/torrents/selectFiles/{id}", data={"files": "all"}, timeout=3)
         if result:
@@ -189,39 +156,37 @@ class RealDebridManager:
             return result, result['id']
         return None, None
     
-    def cleanup_debrid_library(self):
-        """Clean up real-debrid library by removing duplicate torrents based on hash."""
-        print("Cleaning up real-debrid library...")
-        
-        # Get torrents or exit if none found
-        if not (torrents := self._get_torrent_list()):
-            print("✗ No torrents found in real-debrid!")
-            return
-        
-        hash_dict = {}
-        stats = {'duplicates': 0, 'started': 0}
-        
+    def get_all_duplicate_torrents(self):
+        """Retrieves duplicate torrents from Real-Debrid by hash."""
+        torrents = self._get_torrent_list()
+        if not torrents:
+            print("No torrents found in Real-Debrid")
+            return []
+
+        seen = {}
+        duplicates = []
+
         for torrent in torrents:
             torrent_hash = torrent.get('hash')
-            
-            # Handle duplicate torrents
-            if torrent_hash in hash_dict:
-                if self._delete_torrent(torrent.get('id')):
-                    stats['duplicates'] += 1
-                    print(f"✓ Deleted duplicate: {torrent.get('filename', 'Unknown')}")
+            if not torrent_hash:
                 continue
-                
-            # Store unique torrent and check if it needs to be started
-            hash_dict[torrent_hash] = torrent
-            if torrent.get('status') not in ['downloaded', 'downloading']:
-                if self.start_magnet_in_debrid(torrent.get('id')):
-                    stats['started'] += 1
-                    print(f"✓ Started torrent: {torrent.get('filename', 'Unknown')}")
 
-        # Print cleanup summary
-        print(f"✓ Torrent cleanup finished!")
-        print(f"Total: {len(torrents)} | Duplicates: {stats['duplicates']} | "
-              f"Needed Start: {stats['started']} | Remaining: {len(hash_dict)}")
+            if torrent_hash in seen:
+                duplicates.append({
+                    'name': torrent.get('filename', 'Unknown'),
+                    'hash': torrent_hash,
+                    'original_id': seen[torrent_hash],
+                    'duplicate_id': torrent.get('id')
+                })
+            else:
+                seen[torrent_hash] = torrent.get('id')
+
+        if duplicates:
+            print(f"\nFound {len(duplicates)} duplicate torrents:")
+            for dup in duplicates:
+                print(f"- {dup['name']} (hash: {dup['hash'][:8]}...)")
+
+        return duplicates
 
 
 

@@ -146,7 +146,7 @@ def add_movie_to_collection_parallel(movie, collection_id):
     """Add a movie to a jellyfin collection in parallel."""
     title = movie.get("title")
     year = movie.get("release_date")[:4]
-    jellyfin_movie = g_jellyfin.get_jellyfin_movie(title)
+    jellyfin_movie = g_jellyfin.get_movie(title)
 
     if jellyfin_movie:
         id = jellyfin_movie.get('Id')
@@ -159,7 +159,7 @@ def add_movie_to_collection_parallel(movie, collection_id):
 
 def add_program_parallel(movie, channel):
     """Add a movie to Tunarr channel programming in parallel."""
-    source = g_jellyfin.get_jellyfin_movie(movie.get("title"))
+    source = g_jellyfin.get_movie(movie.get("title"))
     if source:
         details = g_tmdb.get_movie_details(movie.get("id"))
         if details:
@@ -168,6 +168,22 @@ def add_program_parallel(movie, channel):
             return True
     print(f"✗ Failed to add {movie.get('title')} to Tunarr channel!")
     return False
+
+def delete_jellyfin_movie_parallel(movie):
+    """Delete a movie from Jellyfin in parallel."""
+    id = movie.get('duplicate_id')
+    name = movie.get('name')
+    if g_jellyfin.delete_movie(id):
+        print(f"✓ Deleted {name} from jellyfin!")
+    return True
+
+def delete_debrid_torrent_parallel(movie):
+    """Delete a movie from Real-Debrid in parallel."""
+    id = movie.get('duplicate_id')
+    name = movie.get('name')
+    if g_debrid.delete_torrent(id):
+        print(f"✓ Deleted {name} from real-debrid!")
+    return True
 
 def waiting_animation_spinner(message="Processing", delay=0.1, iterations=3):
     """Display a waiting animation with a spinning cursor."""
@@ -178,7 +194,6 @@ def waiting_animation_spinner(message="Processing", delay=0.1, iterations=3):
         spin = spinner[i % iterations_per_cycle]
         print(f"\r{message} {spin} ({i}/{iterations * iterations_per_cycle})", end="", flush=True)
         time.sleep(delay)
-
     print()
 
 def main():
@@ -193,61 +208,38 @@ def main():
     parser.add_argument("-p", "--person", type=str, help="Search for movies by person!")
     parser.add_argument("-l", "--limit", type=int, default=50, help="Limit the number of movies to search for!")
     parser.add_argument("-b", "--bypass", action="store_true", help="Bypass all input prompts and default to 'yes'")
-    parser.add_argument("-r", "--refresh", action="store_true", help="Refresh/Sync collections!")
     parser.add_argument("-c", "--cleanup", action="store_true", help="Cleanup libraries!")
 
     # Warning: Increasing workers may cause rate limiting on some APIs
-    parser.add_argument("-w", "--workers", type=int, default=1, help="Number of workers to use for processing!")
+    parser.add_argument("-w", "--workers", type=int, default=3, help="Number of workers to use for processing!")
     args = parser.parse_args()
 
     if args.cleanup:
-        g_debrid.cleanup_debrid_library() # Cleanup debrid library
-        g_jellyfin.cleanup_jellyfin_library() # Cleanup jellyfin library
+        print("Cleaning up libraries...")
+
+        movies = g_jellyfin.get_all_duplicate_movies()
+        if len(movies) > 0:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
+                futures = [executor.submit(delete_jellyfin_movie_parallel, movie) for movie in movies]
+                
+                # Wait for all tasks to complete
+                concurrent.futures.wait(futures)
+                successful = sum(1 for future in futures if future.result())
+                print(f"✓ Deleted {successful}/{len(movies)} movies successfully!")
+
+        torrents = g_debrid.get_all_duplicate_torrents()
+        if len(torrents) > 0:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
+                futures = [executor.submit(delete_debrid_torrent_parallel, torrent) for torrent in torrents]
+                
+                # Wait for all tasks to complete
+                concurrent.futures.wait(futures)
+                successful = sum(1 for future in futures if future.result())
+                print(f"✓ Deleted {successful}/{len(torrents)} torrents successfully!")
+
+        print("Cleaning session finished!")
         quit()
-
-    if args.refresh:
-        print("Refreshing all collections...")
-        g_jellyfin.do_library_scan()
-
-        # wait for the library to update
-        waiting_animation_spinner(f"Waiting for library to update", delay=0.1, iterations=50) 
-        collections = g_jellyfin.get_all_jellyfin_collections().get("Items", [])
-
-        # Sync/refresh all collections 
-        # (use more workers for faster processing)
-        for item in collections:
-            source = item.get("Id")
-            name = item.get("Name")     
-
-            person_id, _ = search_for_a_person(name)
-            if person_id:
-                movies = get_movies_by_person(person_id, args.limit)
-                if movies:
-                    # Sync movies to collection in parallel
-                    with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
-                        futures = [executor.submit(add_movie_to_collection_parallel, movie, source) for movie in movies]
-                        
-                        # Wait for all tasks to complete
-                        concurrent.futures.wait(futures)
-                        successful = sum(1 for future in futures if future.result())
-                        print(f"\n✓ Processed {successful}/{len(movies)} movies ({name}) successfully!")
-
-            keyword_id, _ = search_for_a_keyword(name, name)
-            if keyword_id:
-                movies = get_movies_by_keyword(keyword_id, args.limit)
-                if movies:
-                    # Sync movies to collection in parallel
-                    with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
-                        futures = [executor.submit(add_movie_to_collection_parallel, movie, source) for movie in movies]
-                        
-                        # Wait for all tasks to complete
-                        concurrent.futures.wait(futures)
-                        successful = sum(1 for future in futures if future.result())
-                        print(f"\n✓ Added {successful}/{len(movies)} movies ({name}) successfully!")
         
-        print("✓ Refreshed all collections successfully!")
-        quit()
-
     if args.person:
         person_id, name = search_for_a_person(args.person)
         if person_id:
@@ -262,7 +254,7 @@ def main():
     if movies:
 
         if args.bypass or input(f"\nCreate a jellyfin collection for {name.lower()}? (y/n): ").lower() == 'y':
-            group_id = g_jellyfin.create_jellyfin_collection(name.lower())
+            group_id = g_jellyfin.create_collection(name.lower())
 
         if args.bypass or input(f"\nWould you like to add movies to real-debrid? ({len(movies)}) (y/n): ").lower() == 'y':
             print("Adding movies to real-debrid...")
@@ -288,7 +280,7 @@ def main():
 
             # Create a jellyfin collection with the keyword if not already created
             if not group_id:
-                group_id = g_jellyfin.create_jellyfin_collection(name.lower())        
+                group_id = g_jellyfin.create_collection(name.lower())        
 
             # Add movies to collection in parallel
             with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
@@ -316,7 +308,7 @@ def main():
         
     else:
         print("✗ Error: No movies found quiting program!")
-        quit()          
+        quit()      
         
 if __name__ == "__main__":
     main()
