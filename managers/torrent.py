@@ -15,6 +15,9 @@ import requests
 from dotenv import load_dotenv
 from bs4 import BeautifulSoup
 
+# Import custom libraries
+from managers.proxies import ProxyManager
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -38,12 +41,14 @@ class TorrentManager:
         self.x1337_url = "https://1337x.to/search/{}/1/"
         self.yts_url = "https://yts.mx/api/v2/list_movies.json?query_term={}"
         self.headers = {'User-Agent': 'Mozilla/5.0'}
-        self.quality = os.getenv('MOVIE_QUALITY')
+        self.quality = os.getenv('MOVIE_QUALITY') or "1080p"
+        self.proxy_manager = ProxyManager()
 
     def _make_request(self, method, url, is_json=False):
         """Internal helper function to make web requests."""
         try:
-            response = requests.request(method, url, headers=self.headers)
+            proxy = self.proxy_manager.get_proxy()
+            response = requests.request(method, url, headers=self.headers, proxies=proxy)
             response.raise_for_status()
             return response.json() if is_json else response.text
         except requests.exceptions.RequestException as e:

@@ -15,29 +15,30 @@ import time
 import requests
 from dotenv import load_dotenv
 
+# Import custom libraries
+from managers.tmdb import TMDBManager
+
 # Load environment variables from .env file
 load_dotenv()
-
-from managers.tmdb import TMDBManager
-g_tmdb = TMDBManager()
 
 class TunnarEntry:
     """A class to represent a programming entry in Tunarr."""
     def __init__(self, details, jellyfinSourceId):
+        self.tmdb = TMDBManager()
         self.external_source_type = "Jellyfin"
         self.title = details.get('original_title')
         self.external_key = f"{jellyfinSourceId}"
-        self.summary = details.get('overview')
-        self.release_date = f"{details.get('release_date')}T00:00:00.0000000Z"
+        self.summary = details.get('overview') or "No summary available." # is not required
+        self.release_date = f"{details.get('release_date')}" or "0000-00-00" # is not required
         self.runtime = details.get('runtime') * 60 * 1000
-        self.year = self.release_date[:4]
         self.tmdb_id = details.get('id')
         self.imdb_id = details.get('imdb_id')
+        self.official_rating = "NR"
 
         production_countries = details.get('production_countries', [])
         self.iso_3166_1 = production_countries[0].get('iso_3166_1') if production_countries else 'US' 
         
-        for result in g_tmdb.get_movie_release_dates(self.tmdb_id).get('results'):
+        for result in self.tmdb.get_movie_release_dates(self.tmdb_id).get('results'):
             if result.get('iso_3166_1') == self.iso_3166_1:
                 self.official_rating = result.get('release_dates')[0].get('certification')
                 break
@@ -52,7 +53,6 @@ class TunnarEntry:
                 f"summary='{self.summary}', "
                 f"release_date='{self.release_date}', "
                 f"runtime={self.runtime}, "
-                f"year={self.year}, "
                 f"tmdb_id={self.tmdb_id}, "
                 f"imdb_id='{self.imdb_id}', "
                 f"iso_3166_1='{self.iso_3166_1}', "
@@ -133,6 +133,7 @@ class TunarrManager():
     
     def add_programming(self, channel_id, entry):
         """Adds programming to a channel."""
+
         data = {
             "type": "manual",
             "lineup": [{
@@ -145,12 +146,12 @@ class TunarrManager():
                 "duration": entry.runtime,
                 "externalSourceId": entry.external_source_type,
                 "externalKey": entry.external_key,
-                "rating": entry.official_rating if hasattr(entry, 'official_rating') else "NR",
+                "rating": entry.official_rating,
                 "summary": entry.summary,
                 "title": entry.title,
                 "type": "content",
                 "subtype": "movie",
-                "year": int(entry.year),
+                "year": int(entry.release_date[:4]),
                 "parent": {"externalIds": []},
                 "grandparent": {"externalIds": []},
                 "externalIds": [

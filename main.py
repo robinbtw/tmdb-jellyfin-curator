@@ -265,7 +265,7 @@ def main():
             group_id = g_jellyfin.create_jellyfin_collection(name.lower())
 
         if args.bypass or input(f"\nWould you like to add movies to real-debrid? ({len(movies)}) (y/n): ").lower() == 'y':
-
+            print("Adding movies to real-debrid...")
             # Process movies in parallel using ThreadPoolExecutor
             with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
                 futures = [executor.submit(process_movie_parallel, movie) for movie in movies]
@@ -320,4 +320,3 @@ def main():
         
 if __name__ == "__main__":
     main()
-    

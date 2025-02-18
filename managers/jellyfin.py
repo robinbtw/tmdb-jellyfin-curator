@@ -31,190 +31,130 @@ class JellyfinManager:
         try:
             response = requests.request(method, url, headers=self.headers, params=params, data=data, timeout=timeout)
             response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
+            
+            if method.upper() in ['POST', 'DELETE']:
+                return True if response.status_code == 204 else response.json() if response.content else True
+
             return response.json()
         
         except requests.exceptions.RequestException as e:
-            print(f"✗ API request failed: {e}")
+            print(f"✗ Jellyfin request ({endpoint}) failed: {e}")
             return None
 
-    def get_library_scan_task_id(self):
+    def _get_library_scan_task_id(self):
         """Gets the task scheduler ID for library scanning."""
-        try:
-            print("Getting library scan task Id...")
-            url = f"{self.jellyfin_server}/ScheduledTasks"
-            response = requests.get(url, headers=self.headers)
-            response.raise_for_status()
-            tasks = response.json()
-            
-            task_id = None
-            for task in tasks:
-                if task.get("Key") == "RefreshLibrary":
-                    task_id = task["Id"]
-                    break
-            
-            return task_id
+        print("Getting library scan task Id...")
+        tasks = self._make_request('GET', "/ScheduledTasks")
         
-        except requests.exceptions.RequestException as e:
-            print(f"✗ Failed to get library scan task Id: {e}")
-            return None
+        task_id = None
+        for task in tasks:
+            if task.get("Key") == "RefreshLibrary":
+                task_id = task["Id"]
+                break
+        
+        return task_id
+    
+    def _get_all_movies(self):
+        """Retrieves all movies from Jellyfin."""
+        params = {
+            'recursive': 'true',
+            'includeItemTypes': 'Movie'
+        }
+        return self._make_request('GET', "/Items", params=params)
+    
+    def _get_jellyfin_collection(self, collection_name):
+        """Retrieves a Jellyfin collection by name."""
+        params = {'recursive': 'true', 'includeItemTypes': 'BoxSet', 'searchTerm': collection_name}
+        response = self._make_request('GET', "/Items", params=params)
+        
+        if response:
+            items = response.get("Items", [])
+            if items:
+                for item in items:
+                    if item["Name"].lower() == collection_name.lower():
+                        return item["Id"]
+        return None
+        
+    def _is_movie_in_collection(self, movie_id, collection_id):
+        """Checks if a movie is already in a Jellyfin collection."""
+        params = {'parentId': collection_id, 'recursive': 'true'}
+        response = self._make_request('GET', "/Items", params=params)
+        
+        if response:
+            items = response.get("Items", [])
+            if items:
+                for item in items:
+                    if item["Id"].lower() == movie_id.lower():
+                        return item["Id"]
+        return None
+              
+    def _delete_jellyfin_movie(self, movie_id):
+        """Removes a movie from the Jellyfin library."""
+        self._make_request('DELETE', f"/Items/{movie_id}")
 
-    def do_library_scan(self):
-        """Performs a library scan on the Jellyfin server."""
-        try:
-            task_id = self.get_library_scan_task_id()
-            
-            if task_id:
-                url = f"{self.jellyfin_server}/ScheduledTasks/Running/{task_id}"
-                response = requests.post(url, headers=self.headers)
-                response.raise_for_status()
-                if response.status_code == 204:
-                    print("Starting library scan...")
+    def _remove_movie_from_collection(self, movie_id, collection_id):
+        """Removes a movie from a Jellyfin collection."""
+        self._make_request('DELETE', f"/Collections/{collection_id}/Items/{movie_id}")
 
-        except requests.exceptions.RequestException as e:
-            print(f"✗ Failed to perform library scan: {e}")
+    def get_all_jellyfin_collections(self):
+        """Retrieves all Jellyfin collections."""
+        params = {'recursive': 'true', 'includeItemTypes': 'BoxSet'}
+        return self._make_request('GET', "/Items", params=params)
 
     def get_jellyfin_movie(self, movie_name):
         """Retrieves item ID for a movie by name from the Jellyfin movies library."""
-        try:
-            url = f"{self.jellyfin_server}/Items?includeItemTypes=Movie&recursive=true&searchTerm={movie_name}"
-            response = requests.get(url, headers=self.headers)
-            response.raise_for_status()
-
-            items = response.json().get("Items", [])        
+        params = {'includeItemTypes': 'Movie', 'recursive': 'true', 'searchTerm': movie_name}
+        response = self._make_request('GET', "/Items", params=params)
+        
+        if response:
+            items = response.get("Items", [])
             if items:
                 # Try exact match first
                 for item in items:
                     if item["Name"].lower() == movie_name.lower():
                         return item
-            return None
-        
-        except requests.exceptions.RequestException as e:
-            print(f"✗ Failed to retrieve item for movie {movie_name}: {e}")
-            return None
-        
-    def delete_jellyfin_movie(self, movie_id):
-        """Removes a movie from the Jellyfin library."""
-        try:
-            url = f"{self.jellyfin_server}/Items/{movie_id}"
-            response = requests.delete(url, headers=self.headers)
-            response.raise_for_status()
-        
-        except requests.exceptions.RequestException as e:
-            print(f"✗ Failed to remove movie {movie_id}: {e}")
+        return None
+    
+    def add_movie_to_collection(self, movie_id, collection_id):
+        """Adds a movie to a Jellyfin collection."""
+        if self._is_movie_in_collection(movie_id, collection_id):
+            return
+                
+        params = {'ids': movie_id}
+        self._make_request('POST', f"/Collections/{collection_id}/Items", params=params)
 
     def create_jellyfin_collection(self, collection_name):
         """Creates a new collection in Jellyfin if it doesn't already exist."""
-        try:
-            collection = self.get_jellyfin_collection(collection_name)
-            if collection:
-                print(f"Collection {collection_name} already exists lets use it.")
-                return collection
+        collection = self._get_jellyfin_collection(collection_name)
+        if collection:
+            print(f"Collection {collection_name} already exists lets use it.")
+            return collection
 
-            print("Creating jellyfin collection...")
-            url = f"{self.jellyfin_server}/Collections?Name={collection_name}"
-            response = requests.post(url, headers=self.headers)
-            response.raise_for_status()
-
-            return response.json()["Id"]
-        
-        except requests.exceptions.RequestException as e:
-            print(f"✗ Failed to create collection {collection_name}: {e}")
-            return None
-
-    def get_jellyfin_collection(self, collection_name):
-        """Retrieves a Jellyfin collection by name."""
-        try:
-            url = f"{self.jellyfin_server}/Items?recursive=true&includeItemTypes=BoxSet&searchTerm={collection_name}"
-            response = requests.get(url, headers=self.headers)
-            response.raise_for_status()
-
-            items = response.json().get("Items", [])
-            if items:
-                for item in items:
-                    if item["Name"].lower() == collection_name.lower():
-                        return item["Id"]   
-                       
-            return None
-        
-        except requests.exceptions.RequestException as e:
-            print(f"✗ Failed to retrieve collection {collection_name}: {e}")
-            return None
-        
-    def get_all_jellyfin_collections(self):
-        """Retrieves all Jellyfin collections."""
-        try:
-            url = f"{self.jellyfin_server}/Items?recursive=true&includeItemTypes=BoxSet"
-            response = requests.get(url, headers=self.headers)
-            response.raise_for_status()
-            return response.json()
-        
-        except requests.exceptions.RequestException as e:
-            print(f"✗ Failed to retrieve all collections: {e}")
-            return None
-        
-    def is_movie_in_collection(self, movie_id, collection_id):
-        """Checks if a movie is already in a Jellyfin collection."""
-        try:
-            url = f"{self.jellyfin_server}/Items?parentId={collection_id}&recursive=true"
-            response = requests.get(url, headers=self.headers)
-            response.raise_for_status()
-
-            items = response.json().get("Items", [])
-            if items:
-                for item in items:
-                    if item["Id"].lower() == movie_id.lower():
-                        return item["Id"]
-            
-        except requests.exceptions.RequestException as e:
-            print(f"✗ Failed to check if movie {movie_id} is in collection: {e}")
-        return None
-
-    def add_movie_to_collection(self, movie_id, collection_id):
-        """Adds a movie to a Jellyfin collection."""
-        try:
-            if self.is_movie_in_collection(movie_id, collection_id):
-                return
-
-            url = f"{self.jellyfin_server}/Collections/{collection_id}/Items?ids={movie_id}"
-            response = requests.post(url, headers=self.headers)
-            response.raise_for_status()
-
-        except requests.exceptions.RequestException as e:
-            print(f"✗ Failed to add movie to collection: {e}")
-
-    def remove_movie_from_collection(self, movie_id, collection_id):
-        """Removes a movie from a Jellyfin collection."""
-        try:
-            url = f"{self.jellyfin_server}/Collections/{collection_id}/Items/{movie_id}"
-            response = requests.delete(url, headers=self.headers)
-            response.raise_for_status()
-
-        except requests.exceptions.RequestException as e:
-            print(f"✗ Failed to remove movie from collection: {e}")
-
-    def get_all_movies(self):
-        """Retrieves all movies from Jellyfin."""
-        try:
-            url = f"{self.jellyfin_server}/Items?recursive=true&includeItemTypes=Movie"
-            response = requests.get(url, headers=self.headers)
-            response.raise_for_status()
-            return response.json()
-        
-        except requests.exceptions.RequestException as e:
-            print(f"✗ Failed to retrieve all movies: {e}")
-            return None
-        
+        print("Creating jellyfin collection...")
+        params = {'Name': collection_name}
+        response = self._make_request('POST', "/Collections", params=params)
+        return response["Id"] if response else None
+    
+    def do_library_scan(self):
+        """Performs a library scan on the Jellyfin server."""
+        task_id = self._get_library_scan_task_id()
+        if task_id:
+            response = self._make_request('POST', f"/ScheduledTasks/Running/{task_id}")
+            if response:
+                print("Starting library scan...")
+                return True
+      
     def cleanup_jellyfin_library(self):
         """Removes duplicate movies from the Jellyfin library."""
         print("Cleaning up jellyfin library...")
-        movies = self.get_all_movies().get("Items", [])
+        movies = self._get_all_movies().get("Items", [])
         name_dict = {}
 
         duplicates = 0 
         for movie in movies:
             if movie.get('Name') in name_dict:     
                 duplicates += 1           
-                self.delete_jellyfin_movie(movie.get('Id'))
+                self._delete_jellyfin_movie(movie.get('Id'))
                 print(f"✓ Deleted duplicate movie: { movie.get('Name') }")
                 continue
 
