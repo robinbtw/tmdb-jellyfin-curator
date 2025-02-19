@@ -15,9 +15,6 @@ import time
 import requests
 from dotenv import load_dotenv
 
-# Import custom libraries
-from managers.proxies import ProxyManager
-
 # Load environment variables
 load_dotenv()
 
@@ -29,7 +26,6 @@ class RealDebridManager:
         self.api_url = os.getenv('REAL_DEBRID_API_URL')
         self.api_key = os.getenv('REAL_DEBRID_API_KEY')
         self.headers = { 'Authorization': f'Bearer {self.api_key}' }
-        self.proxy_manager = ProxyManager()
 
     def _inform_user(self):
         if self._get_user():
@@ -45,8 +41,7 @@ class RealDebridManager:
         """Internal helper function to make API requests."""
         url = f"{self.api_url}{endpoint}"
         try:
-            proxy = self.proxy_manager.get_proxy()
-            response = requests.request(method, url, headers=self.headers, params=params, data=data, timeout=timeout, proxies={'http': proxy })
+            response = requests.request(method, url, headers=self.headers, params=params, data=data, timeout=timeout)
             response.raise_for_status()  
 
             # Return True for successful DELETE requests (204 No Content)
