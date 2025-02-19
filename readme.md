@@ -85,7 +85,7 @@ TUNARR_TRANSCODE_CONFIG_ID=your-tunarr-config-id
 ### Basic Commands
 ```bash
 # Search by keyword
-python main.py -k "action" -l 20 -w 4
+python main.py -k "dark fantasy" -l 20 -w 4
 
 # Search by person
 python main.py -p "tom cruise" -l 30 -w 6
@@ -109,7 +109,6 @@ python main.py -t
 - `-r, --random`: Get random movie suggestions
 - `-l, --limit`: Set maximum results (default: 30)
 - `-w, --workers`: Set parallel workers (default: 1)
-- `-v, --verify`: Check media integrity
 - `-c, --cleanup`: Remove duplicates
 - `-t, --test`: Test proxy connections
 - `-b, --bypass`: Skip confirmation prompts
@@ -130,19 +129,18 @@ python main.py -k "horror" -l 100 -w 6 -b
 
 #### Maintain Library
 ```bash
-# Verify metadata and clean duplicates
-python main.py -v
+# Remove duplicates
 python main.py -c
 ```
 
 ## ⚙️ Best Practices
 
 - Start with low worker counts (1-2) to avoid rate limits
-- Use `-v` regularly to maintain metadata quality
 - Run `-c` periodically to clean up duplicates
 - Test connections with `-t` if experiencing issues
-- Use quotes for multi-word searches
 - Keep Jellyfin libraries updated for best matching
+- When searching keywords, try to use more specific searches
+- Use quotes for multi-word searches
 
 ## 🔍 Supported Search Categories
 
