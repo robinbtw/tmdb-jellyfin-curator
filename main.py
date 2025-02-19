@@ -1,6 +1,6 @@
 """
 Filename: main.py
-Date: 2023-10-05
+Date: 02-17-2025
 Author: robinbtw
 
 Description:
@@ -20,6 +20,7 @@ from managers.jellyfin import JellyfinManager
 from managers.debrid import RealDebridManager
 from managers.torrent import TorrentManager
 from managers.tunarr import TunarrManager, TunnarEntry
+from managers.proxies import ProxyManager
 
 # Generic movie keywords
 g_generic_keywords = [
@@ -45,6 +46,7 @@ g_torrent = TorrentManager()
 g_debrid = RealDebridManager()
 g_jellyfin = JellyfinManager()
 g_tunarr = TunarrManager()
+g_proxies = ProxyManager()
 
 def search_for_a_keyword(keyword, title=""):
     """Search for a keyword on TMDB and return the ID and name."""
@@ -121,7 +123,7 @@ def get_movies_by_keyword(id, limit=50):
     # Sort all results by popularity before returning
     return sorted(results, key=lambda x: x.get('popularity', 0), reverse=True)
 
-def process_movie_parallel(movie):
+def process_movie(movie):
     """Process a movie in parallel by adding it to real-debrid."""
     title = movie.get("title")
     release_date = movie.get("release_date")[:4]
@@ -140,9 +142,9 @@ def process_movie_parallel(movie):
                 return True
     else:
         print(f"✗ Failed to proccess {title}: no torrents found!")
-        return False
+        return False 
     
-def add_movie_to_collection_parallel(movie, collection_id):
+def add_movie_to_collection(movie, collection_id):
     """Add a movie to a jellyfin collection in parallel."""
     title = movie.get("title")
     year = movie.get("release_date")[:4]
@@ -157,19 +159,29 @@ def add_movie_to_collection_parallel(movie, collection_id):
     print(f"✗ Failed to add {title} {year} to collection!")
     return False
 
-def add_program_parallel(movie, channel):
+def add_program(movie, channel):
     """Add a movie to Tunarr channel programming in parallel."""
-    source = g_jellyfin.get_movie(movie.get("title"))
+    title = movie.get("title")
+
+    # First check if movie already exists in channel programming
+    programs = g_tunarr.get_channel_programs(channel['id'])
+
+    if any(prog.get('title') == title for prog in programs):
+        print(f"• Skipping {title}: already in channel programming")
+        return True
+
+    source = g_jellyfin.get_movie(title)
     if source:
         details = g_tmdb.get_movie_details(movie.get("id"))
         if details:
             g_tunarr.add_programming(channel['id'], TunnarEntry(details, source.get("Id")))
             print(f"✓ Added {movie.get('title')} to Tunarr channel!")
             return True
+        
     print(f"✗ Failed to add {movie.get('title')} to Tunarr channel!")
     return False
 
-def delete_jellyfin_movie_parallel(movie):
+def delete_jellyfin_movie(movie):
     """Delete a movie from Jellyfin in parallel."""
     id = movie.get('duplicate_id')
     name = movie.get('name')
@@ -177,7 +189,7 @@ def delete_jellyfin_movie_parallel(movie):
         print(f"✓ Deleted {name} from jellyfin!")
     return True
 
-def delete_debrid_torrent_parallel(movie):
+def delete_debrid_torrent(movie):
     """Delete a movie from Real-Debrid in parallel."""
     id = movie.get('duplicate_id')
     name = movie.get('name')
@@ -206,21 +218,28 @@ def main():
     parser = argparse.ArgumentParser(description="Search for movies by keyword or person!")
     parser.add_argument("-k", "--keyword", type=str, help="Search for movies by keyword!")
     parser.add_argument("-p", "--person", type=str, help="Search for movies by person!")
-    parser.add_argument("-l", "--limit", type=int, default=50, help="Limit the number of movies to search for!")
+    parser.add_argument("-l", "--limit", type=int, default=40, help="Limit the number of movies to search for!")
     parser.add_argument("-b", "--bypass", action="store_true", help="Bypass all input prompts and default to 'yes'")
     parser.add_argument("-c", "--cleanup", action="store_true", help="Cleanup libraries!")
+    parser.add_argument("-t", "--test", action="store_true", help="Test proxies!")
 
     # Warning: Increasing workers may cause rate limiting on some APIs
-    parser.add_argument("-w", "--workers", type=int, default=3, help="Number of workers to use for processing!")
+    parser.add_argument("-w", "--workers", type=int, default=1, help="Number of workers to use for processing!")
     args = parser.parse_args()
 
+    if args.test:
+        working_count = g_proxies.test_proxies()
+        if working_count == 0:
+            print("✗ No working proxies found!")
+        quit()
+        
     if args.cleanup:
         print("Cleaning up libraries...")
 
         movies = g_jellyfin.get_all_duplicate_movies()
         if len(movies) > 0:
             with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
-                futures = [executor.submit(delete_jellyfin_movie_parallel, movie) for movie in movies]
+                futures = [executor.submit(delete_jellyfin_movie, movie) for movie in movies]
                 
                 # Wait for all tasks to complete
                 concurrent.futures.wait(futures)
@@ -230,7 +249,7 @@ def main():
         torrents = g_debrid.get_all_duplicate_torrents()
         if len(torrents) > 0:
             with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
-                futures = [executor.submit(delete_debrid_torrent_parallel, torrent) for torrent in torrents]
+                futures = [executor.submit(delete_debrid_torrent, torrent) for torrent in torrents]
                 
                 # Wait for all tasks to complete
                 concurrent.futures.wait(futures)
@@ -259,8 +278,8 @@ def main():
         if args.bypass or input(f"\nWould you like to add movies to real-debrid? ({len(movies)}) (y/n): ").lower() == 'y':
             print("Adding movies to real-debrid...")
             # Process movies in parallel using ThreadPoolExecutor
-            with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
-                futures = [executor.submit(process_movie_parallel, movie) for movie in movies]
+            with concurrent.futures.ThreadPoolExecutor(max_workers=min(1, args.workers)) as executor:
+                futures = [executor.submit(process_movie, movie) for movie in movies]
                 
                 # Wait for all tasks to complete
                 concurrent.futures.wait(futures)
@@ -284,7 +303,7 @@ def main():
 
             # Add movies to collection in parallel
             with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
-                futures = [executor.submit(add_movie_to_collection_parallel, movie, group_id) for movie in movies]
+                futures = [executor.submit(add_movie_to_collection, movie, group_id) for movie in movies]
                 
                 # Wait for all tasks to complete
                 concurrent.futures.wait(futures)
@@ -299,7 +318,7 @@ def main():
 
             # Process programming additions in parallel
             with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
-                futures = [executor.submit(add_program_parallel, movie, channel) for movie in movies]
+                futures = [executor.submit(add_program, movie, channel) for movie in movies]
                 
                 # Wait for all tasks to complete
                 concurrent.futures.wait(futures)
@@ -312,3 +331,6 @@ def main():
         
 if __name__ == "__main__":
     main()
+
+
+

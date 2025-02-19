@@ -48,7 +48,7 @@ class TorrentManager:
         """Internal helper function to make web requests."""
         try:
             proxy = self.proxy_manager.get_proxy()
-            response = requests.request(method, url, headers=self.headers, proxies=proxy)
+            response = requests.request(method, url, headers=self.headers, timeout=8, proxies={'http': proxy })
             response.raise_for_status()
             return response.json() if is_json else response.text
         except requests.exceptions.RequestException as e:

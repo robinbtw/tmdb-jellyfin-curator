@@ -46,8 +46,8 @@ class RealDebridManager:
         url = f"{self.api_url}{endpoint}"
         try:
             proxy = self.proxy_manager.get_proxy()
-            response = requests.request(method, url, headers=self.headers, params=params, data=data, timeout=timeout, proxies=proxy)
-            response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
+            response = requests.request(method, url, headers=self.headers, params=params, data=data, timeout=timeout, proxies={'http': proxy })
+            response.raise_for_status()  
 
             # Return True for successful DELETE requests (204 No Content)
             if response.status_code == 204:
@@ -180,11 +180,6 @@ class RealDebridManager:
                 })
             else:
                 seen[torrent_hash] = torrent.get('id')
-
-        if duplicates:
-            print(f"\nFound {len(duplicates)} duplicate torrents:")
-            for dup in duplicates:
-                print(f"- {dup['name']} (hash: {dup['hash'][:8]}...)")
 
         return duplicates
 

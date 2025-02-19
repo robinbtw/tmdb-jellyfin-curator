@@ -75,9 +75,10 @@ python main.py -p "person" -l limit -w workers
 Arguments:
 - `-k, --keyword`: Search keyword (use quotes for multiple words)
 - `-p, --person`: Search by cast, crew, writer, etc (use quotes for multiple words)
-- `-l, --limit`: Maximum number of movies to process (default: 50)
-- `-w, --workers`: Number of parallel workers (default: 3, reduce if to many requests)
+- `-l, --limit`: Maximum number of movies to process (default: 30)
+- `-w, --workers`: Number of parallel workers (default: 1, reduce if to many requests)
 - `-c, --cleanup`: Remove duplicate hashes and movies.
+- `-t, --test`: Test proxies.
 
 Example:
 ```bash

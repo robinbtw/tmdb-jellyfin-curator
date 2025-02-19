@@ -187,9 +187,9 @@ class TunarrManager():
         """Returns all channels in Tunarr."""
         return self._make_request('GET', '/channels')
     
-    def get_channel_programming(self, channel_id):
+    def get_channel_programs(self, channel_id):
         """Returns all programmings for a channel."""
-        return self._make_request('GET', f'/channels/{channel_id}/programming')
+        return self._make_request('GET', f'/channels/{channel_id}/programs')
     
     def get_channel_by_name(self, name):
         """Returns a channel by name."""

@@ -9,90 +9,83 @@ from ProxyScrape API.
 """
 
 # Import required libraries
-import os
 import requests
-from typing import Dict, List, Optional
+from typing import Optional
 from datetime import datetime, timedelta
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
 
 class ProxyManager:
-    """Manages proxy fetching and rotation from ProxyScrape."""
-    
     def __init__(self):
-        """Initialize the ProxyManager."""
-        self.proxies: List[Dict[str, str]] = []
-        self.last_update: Optional[datetime] = None
-        self.update_interval = timedelta(hours=1)
-        self.current_index = 0
         self.proxies = []
-
-    def fetch_proxies(self) -> bool:
-        """Fetch fresh proxies from ProxyScrape API."""
-
-        if (self.last_update and 
-            datetime.now() - self.last_update < self.update_interval):
-            return True
-
+        self.last_check = None
+        self.check_interval = timedelta(minutes=30)
+        self.current_index = 0
+    
+    def _fetch_proxies(self) -> bool:
+        """Fetch new proxies from proxyscrape"""
         try:
-            url = (
+            response = requests.get(
                 "https://api.proxyscrape.com/v2/?"
                 "request=getproxies"
                 "&protocol=http"
                 "&timeout=10000"
                 "&country=US"
                 "&ssl=all"
-                "&anonymity=all"
+                "&anonymity=all",
+                timeout=10
             )
             
-            response = requests.get(url, timeout=10)
-            response.raise_for_status()
-            proxy_list = response.text.strip().split('\n')
-
-            if proxy_list:
-                for proxy_line in proxy_list[:100]:
-                    try:
-                        ip, port = proxy_line.strip().split(':')
-                        proxy_url = f"http://{ip}:{port}"
-                        self.proxies.append({'http': proxy_url })
-                    except ValueError:
-                        continue
-                
-                self.last_update = datetime.now()
-                self.current_index = 0
+            if response.status_code == 200:
+                self.proxies = [
+                    f"http://{proxy}" 
+                    for proxy in response.text.split("\n") 
+                    if proxy.strip()
+                ]
+                self.last_check = datetime.now()
+                #print(f"✓ Fetched {len(self.proxies)} proxies")
                 return True
-            
-            print("✗ Failed to fetch proxies: Empty response")
-            return False
-
-        except requests.exceptions.RequestException as e:
-            print(f"✗ Failed to fetch proxies: {str(e)}")
             return False
         except Exception as e:
-            print(f"✗ Failed to parse proxy data: {str(e)}")
+            print(f"✗ Failed to fetch proxies: {str(e)}")
             return False
-
-    def get_proxy(self) -> Optional[Dict[str, str]]:
-        """Get current proxy and rotate to next one."""
-        if not self.proxies:
-            self.fetch_proxies()
-            if not self.proxies:
+            
+    def get_proxy(self) -> Optional[str]:
+        """Get next proxy using round-robin"""
+        if not self.proxies or (
+            self.last_check and 
+            datetime.now() - self.last_check > self.check_interval
+        ):
+            if not self._fetch_proxies():
                 return None
-
-        current_proxy = self.proxies[self.current_index]
+                
+        if not self.proxies:
+            return None
+            
+        proxy = self.proxies[self.current_index]
         self.current_index = (self.current_index + 1) % len(self.proxies)
-        return current_proxy
+        return proxy
 
-    def test_proxy(self, proxy: Dict[str, str]) -> bool:
-        """Test if a proxy is working."""
-        try:
-            response = requests.get(
-                'https://api.ipify.org?format=json',
-                proxies=proxy,
-                timeout=5
-            )
-            return response.status_code == 200
-        except:
-            return False
+    def test_proxies(self) -> int:
+        """Test all proxies and return count of working ones"""
+        working = 0
+        print("Testing proxies...")
+        
+        if not self._fetch_proxies():
+            return 0
+            
+        for proxy in self.proxies[:]:
+            try:
+                response = requests.get(
+                    'https://httpbin.org/ip',
+                    proxies={'http': proxy },
+                    timeout=5
+                )
+                if response.status_code == 200:
+                    print(f"✓ {proxy}: is working") 
+                    working += 1
+                else:
+                    self.proxies.remove(proxy)
+            except:
+                self.proxies.remove(proxy)
+                
+        print(f"\nSummary: {working}/{len(self.proxies)} proxies working")
+        return working
