@@ -13,9 +13,6 @@ import os
 import requests
 from dotenv import load_dotenv
 
-# Import custom libraries
-from managers.proxies import ProxyManager
-
 # Load environment variables from .env file
 load_dotenv()
 
@@ -27,14 +24,12 @@ class JellyfinManager:
         self.jellyfin_server = os.getenv('JELLYFIN_SERVER')
         self.jellyfin_api_key = os.getenv('JELLYFIN_API_KEY')
         self.headers = {"Authorization": "Mediabrowser Token=" + self.jellyfin_api_key}
-        self.proxy_manager = ProxyManager()
 
-    def _make_request(self, method, endpoint, params=None, data=None, timeout=5):
+    def _make_request(self, method, endpoint, params=None, timeout=5):
         """Internal helper function to make API requests."""
         url = f"{self.jellyfin_server}{endpoint}"
         try:
-            proxy = self.proxy_manager.get_proxy()
-            response = requests.request(method, url, headers=self.headers, params=params, proxies={'http': proxy }, timeout=timeout)
+            response = requests.request(method, url, headers=self.headers, params=params, timeout=timeout)
             response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
             
             if method.upper() in ['POST', 'DELETE']:
