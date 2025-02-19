@@ -1,33 +1,50 @@
+# Movie Collection Automation Suite
+
 [![Python](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Jellyfin](https://img.shields.io/badge/jellyfin-compatible-00A4DC)](https://jellyfin.org/)
 [![Real-Debrid](https://img.shields.io/badge/Real--Debrid-API-red)](https://real-debrid.com/)
 [![TMDB](https://img.shields.io/badge/TMDB-API-01B4E4)](https://www.themoviedb.org/)
 
-# Automated Movie Collection Manager
+A comprehensive automation tool for managing movie collections. Integrates TMDB for movie discovery, Real-Debrid for secure downloads, and Jellyfin for media organization. Features automated metadata management, smart collection creation, and 24/7 channel programming through Tunarr.
 
-A Python-based automation tool that helps manage movie collections by integrating TMDB, Real-Debrid, and Jellyfin. Search for movies by keywords, automatically send them to Real-Debrid, and organize them into Jellyfin collections.
+## 🌟 Key Features
 
-## Features
+### Movie Discovery & Management
+- Search movies by keywords, cast members, or discover random suggestions
+- Smart metadata verification and auto-updates
+- Automated quality-based media selection (720p/1080p/2160p)
+- Multi-threaded processing for efficient operations
 
-- Search movies by keywords or people using TMDB API
-- Automated torrent search across multiple sites (1337x, YTS)
-- Smart torrent selection based on quality and seeder count
-- Real-Debrid integration for secure downloading
-- Automatic Jellyfin collection management
-- Multi-threaded processing for faster operations
-- Rate-limiting protection for API calls
+### Collection Organization
+- Automatic collection creation and management in Jellyfin
+- Smart duplicate detection and cleanup
+- Library integrity verification
+- Automated metadata updates for incomplete entries
 
-## Prerequisites
+### Tunarr Integration
+- Create 24/7 movie channels automatically
+- Smart programming based on collections
+- Automatic channel number normalization
+- Support for filmography-based channels
 
-- Python 3.x
-- [Jellyfin](https://jellyfin.org/) server (plex/emby currently not supported)
-- Real-Debrid account with api key
-- TMDb account and with api key
-- [Zurg](https://github.com/debridmediamanager/zurg-testing) setup for Real-Debrid
-- [Rclone](https://rclone.org) for cloud storage mounting in windows explorer
+### Real-Debrid Features
+- Secure torrent handling through Real-Debrid
+- Smart caching system to avoid duplicates
+- Quality-based selection with seeder verification
+- Multi-site search support (1337x, YTS)
 
-## Installation
+## 📋 Prerequisites
+
+- Python 3.9 or higher
+- Jellyfin server (Plex/Emby not supported)
+- Real-Debrid premium account
+- TMDB API access
+- [Zurg](https://github.com/debridmediamanager/zurg-testing) for Real-Debrid integration
+- [Rclone](https://rclone.org) for cloud storage mounting
+- [Tunarr](https://github.com/arabcoders/tunarr) for channel management
+
+## 🚀 Quick Start
 
 1. Clone the repository:
 ```bash
@@ -35,88 +52,125 @@ git clone https://github.com/robinbtw/tmdb-automation.git
 cd tmdb-automation
 ```
 
-2. Install required packages:
+2. Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-3. Create a `.env` file in the root directory with your configuration:
+3. Configure your environment:
+Create a `.env` file with your settings:
 ```env
-# Movie quality. Select one: 720p, 1080p, or 2160p
+# Media Quality
 MOVIE_QUALITY=1080p 
 
-# Jellyfin Configuration
+# Jellyfin Settings
 JELLYFIN_SERVER=http://localhost:8096
 JELLYFIN_API_KEY=your-jellyfin-api-key
 
-# TMDb Configuration
+# TMDB Settings
 TMDB_API_KEY=your-tmdb-api-key
 TMDB_API_URL=https://api.themoviedb.org/3
 
-# Real-Debrid Configuration
+# Real-Debrid Settings
 REAL_DEBRID_API_URL=https://api.real-debrid.com/rest/1.0
 REAL_DEBRID_API_KEY=your-real-debrid-api-key
 
-# Tunarr Configuration
+# Tunarr Settings
 TUNARR_SERVER=http://localhost:8000
-TUNARR_TRANSCODE_CONFIG_ID=your-tunarr-transcode-config-id
+TUNARR_TRANSCODE_CONFIG_ID=your-tunarr-config-id
 ```
 
-## Usage
+## 💻 Usage
 
-Run the script with command line arguments:
-
+### Basic Commands
 ```bash
-python main.py -c 
-python main.py -k "keyword" -l limit -w workers 
-python main.py -p "person" -l limit -w workers
+# Search by keyword
+python main.py -k "action" -l 20 -w 4
+
+# Search by person
+python main.py -p "tom cruise" -l 30 -w 6
+
+# Get random suggestions
+python main.py -r -l 15
+
+# Verify media integrity
+python main.py -v
+
+# Clean up duplicates
+python main.py -c
+
+# Test connectivity
+python main.py -t
 ```
 
-Arguments:
-- `-k, --keyword`: Search keyword (use quotes for multiple words)
-- `-p, --person`: Search by cast, crew, writer, etc (use quotes for multiple words)
-- `-l, --limit`: Maximum number of movies to process (default: 30)
-- `-w, --workers`: Number of parallel workers (default: 1, reduce if to many requests)
-- `-c, --cleanup`: Remove duplicate hashes and movies.
-- `-t, --test`: Test proxies.
+### Command Arguments
+- `-k, --keyword`: Search using keywords
+- `-p, --person`: Search by actor/director/writer
+- `-r, --random`: Get random movie suggestions
+- `-l, --limit`: Set maximum results (default: 30)
+- `-w, --workers`: Set parallel workers (default: 1)
+- `-v, --verify`: Check media integrity
+- `-c, --cleanup`: Remove duplicates
+- `-t, --test`: Test proxy connections
+- `-b, --bypass`: Skip confirmation prompts
 
-Example:
+### Example Workflows
+
+#### Create an Actor Collection
 ```bash
-python main.py -p "anne hathaway" -w 10 # anne hathaway movies (default results, 10 workers)
-python ma1n.py -k "racing" # racing movies (default results, workers)
-python main.py -k "time travel" -l 20 # time travel movies (limit 20 results)
-python main.py -k "superhero" -l 50 -w 6 # superhero movies (limit 50 results, 6 workers)
+# Create Tom Cruise collection with 40 movies
+python main.py -p "tom cruise" -l 40 -w 4 -b
 ```
 
-## Supported Torrent Sites
-- 1337x
-- YTS
+#### Build a Genre Channel
+```bash
+# Create horror movie channel with 100 movies
+python main.py -k "horror" -l 100 -w 6 -b
+```
 
-## Features Breakdown
+#### Maintain Library
+```bash
+# Verify metadata and clean duplicates
+python main.py -v
+python main.py -c
+```
 
-### TMDB Integration
-- Keyword-based movie search
-- Movie details and metadata retrieval
-- Smart movie filtering based on ratings
+## ⚙️ Best Practices
 
-### Real-Debrid Features
-- Multi-site torrent search
-- Quality-based torrent selection (preferring 1080p/BluRay)
-- Automatic magnet handling
-- Cache checking to avoid duplicates
+- Start with low worker counts (1-2) to avoid rate limits
+- Use `-v` regularly to maintain metadata quality
+- Run `-c` periodically to clean up duplicates
+- Test connections with `-t` if experiencing issues
+- Use quotes for multi-word searches
+- Keep Jellyfin libraries updated for best matching
 
-### Jellyfin Integration
-- Automatic collection creation
-- Smart movie matching
-- Library scanning and updates
-- Batch movie processing
+## 🔍 Supported Search Categories
 
-## Notes
-- The default worker count is set to 1 to avoid rate limiting
-- Increase workers with caution as it may affect API rate limits
-- The tool prefers 1080p/BluRay releases with good seeder counts
-- Files are processed through Real-Debrid for safety
+### Genres
+- Horror, Comedy, Drama, Adventure
+- Fantasy, Mystery, Crime, Thriller
+- Romance, Animation, Documentary
+- Family, Western, History, Sport
 
-## Disclaimer
+### Themes
+- Superhero, Time Travel, Space
+- Based on Books/Comics/Games
+- Disaster, Post-Apocalyptic
+- Heist, Spy, Crime, Mafia
+- Zombie, Vampire, Robot
+- Dystopian, Cyberpunk
 
-This information is for educational use only.  I do not condone or encourage any illegal activity, including unauthorized downloading. Streaming copyrighted content without permission may present legal risks.  You are solely responsible for your actions.
+## ⚠️ Rate Limiting
+
+- TMDB: 30 requests/10 seconds
+- Real-Debrid: 1 request/2 seconds
+- Jellyfin: No strict limits
+- Tunarr: Local API, no limits
+
+## 🛡️ Disclaimer
+
+This tool is for educational purposes only. Users are responsible for compliance with local laws and service terms. The developers do not endorse or encourage unauthorized content access.
+
+## 🤝 Contributing
+
+Contributions are welcome! Please read our contributing guidelines before submitting pull requests.

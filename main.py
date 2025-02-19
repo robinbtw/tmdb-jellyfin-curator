@@ -63,7 +63,6 @@ class MovieProcessingError(Exception):
     """Custom exception for movie processing errors."""
     pass
 
-# Utility functions
 def show_spinner(message: str, delay: float = 0.1, iterations: int = 3) -> None:
     """Display an animated spinner with a message."""
     chars = ['|', '/', '-', '\\']
@@ -93,8 +92,6 @@ class MovieProcessor:
         successful = process_movies_parallel(self.movies, self.workers)
         print(f"\n✓ Processed {successful}/{len(self.movies)} movies successfully!")
         show_spinner("Waiting for zurg sync", delay=0.1, iterations=75)
-        g_jellyfin.do_library_scan()
-        show_spinner("Waiting for library to update", delay=0.1, iterations=50)
         return successful
 
     def process_collection(self) -> Optional[str]:
@@ -150,7 +147,7 @@ def search_for_a_person(person: str) -> Tuple[Optional[int], Optional[str]]:
     if not results:
         return None, None
 
-    print("Getting most popular person...")
+    print("Filtering out less popular people...")
     # Get movie count for each person
     people_with_counts = []
     for result in results:
@@ -158,6 +155,7 @@ def search_for_a_person(person: str) -> Tuple[Optional[int], Optional[str]]:
         movie_credits = g_tmdb.get_movie_credits(person_id)
         movie_count = len(movie_credits.get("cast", []))
         people_with_counts.append((result, movie_count))
+    print("Think we found our match!")
 
     # Sort by movie count and get the person with most movies
     top = sorted(people_with_counts, key=lambda x: x[1], reverse=True)
@@ -171,32 +169,13 @@ def get_movies_by_person(id: int, limit: int = 50) -> List[Dict[str, Any]]:
     # Sort all results by popularity before returning
     return sorted(credits[:limit], key=lambda x: x.get('popularity', 0), reverse=True)
 
-def get_movies_by_keyword(id: int, limit: int = 50) -> List[Dict[str, Any]]:
+def get_movies_by_keyword(id: int, limit: int) -> List[Dict[str, Any]]:
     """Get movies by keyword ID from TMDB."""
-    results = []
-    response, params = g_tmdb.get_movies_by_keyword(id)
-
-    pages = response.get("total_pages", 1) # Get total pages
-    results.extend(response.get("results", [])) # Get first page results
-
-    for page in range(2, pages + 1):
-        params["page"] = page
-        response, *_ = g_tmdb.get_movies_by_keyword(id, page=page)
-        results.extend(response.get("results", [])) # Append results from next pages
-
-        if len(results) >= limit:
-            return sorted(results[:limit], key=lambda x: x.get('popularity', 0), reverse=True)
-
-    # Sort all results by popularity before returning
-    return sorted(results, key=lambda x: x.get('popularity', 0), reverse=True)
-
-def get_movies_from_keyword(keyword_id: int, limit: int) -> List[Dict[str, Any]]:
-    """Fetch and sort movies by keyword ID."""
     results = []
     page = 1
     
     while True:
-        response, _ = g_tmdb.get_movies_by_keyword(keyword_id, page=page)
+        response, _ = g_tmdb.get_movies_by_keyword(id, page=page)
         current_results = response.get("results", [])
         if not current_results:
             break
@@ -217,6 +196,11 @@ def process_movie(movie: Dict[str, Any]) -> bool:
     title = movie.get("title")
     release_date = movie.get("release_date", "")[:4]
     search_term = f"{title} {release_date}"
+
+    # Check if movie already exists in Jellyfin
+    if g_jellyfin.get_movie(title):
+        print(f"• Skipping {title} ({release_date}): already in jellyfin!")
+        return True
 
     print(f"• Processing {title} ({release_date})...")
     torrents = g_torrent.search_all_sites(search_term)
@@ -243,15 +227,17 @@ def process_movies_parallel(movies: List[Dict[str, Any]], workers: int) -> int:
 
 def process_collection_creation(movies: List[Dict[str, Any]], collection_name: str, workers: int) -> Optional[str]:
     """Create a Jellyfin collection and add movies to it."""
-    collection_id = g_jellyfin.create_collection(collection_name.lower())
+    id = g_jellyfin.create_collection(collection_name.lower())
+    g_jellyfin.do_library_scan()
+    show_spinner("Waiting for library to update", delay=0.1, iterations=50)
 
     with ThreadPoolExecutor(max_workers=workers) as executor:
-        futures = [executor.submit(add_movie_to_collection, movie, collection_id) for movie in movies]
+        futures = [executor.submit(add_movie_to_collection, movie, id) for movie in movies]
         concurrent.futures.wait(futures)
         successful = sum(1 for future in futures if future.result())
         print(f"\n✓ Added {successful}/{len(movies)} movies to collection successfully!")
 
-    return collection_id
+    return id
 
 def add_movie_to_collection(movie: Dict[str, Any], collection_id: str) -> bool:
     """Add a movie to a Jellyfin collection."""
@@ -329,10 +315,7 @@ def handle_cleanup(workers: int) -> None:
     movies = g_jellyfin.get_all_duplicate_movies()
     if movies:
         with ThreadPoolExecutor(max_workers=workers) as executor:
-            futures = [
-                executor.submit(delete_jellyfin_movie, movie) 
-                for movie in movies
-            ]
+            futures = [executor.submit(delete_jellyfin_movie, movie) for movie in movies]
             concurrent.futures.wait(futures)
             successful = sum(1 for future in futures if future.result())
             print(f"✓ Deleted {successful}/{len(movies)} duplicate movies!")
@@ -341,10 +324,7 @@ def handle_cleanup(workers: int) -> None:
     torrents = g_debrid.get_all_duplicate_torrents()
     if torrents:
         with ThreadPoolExecutor(max_workers=workers) as executor:
-            futures = [
-                executor.submit(delete_debrid_torrent, torrent) 
-                for torrent in torrents
-            ]
+            futures = [executor.submit(delete_debrid_torrent, torrent) for torrent in torrents]
             concurrent.futures.wait(futures)
             successful = sum(1 for future in futures if future.result())
             print(f"✓ Deleted {successful}/{len(torrents)} duplicate torrents!")
@@ -368,13 +348,22 @@ def should_create_channel(args: argparse.Namespace, name: str) -> bool:
 def parse_arguments() -> argparse.Namespace:
     """Parse and return command line arguments."""
     parser = argparse.ArgumentParser(description="Search for movies by keyword or person!")
-    parser.add_argument("-k", "--keyword", type=str, help="Search for movies by keyword!")
-    parser.add_argument("-p", "--person", type=str, help="Search for movies by person!")
+
+    # Search group
+    search_group = parser.add_mutually_exclusive_group()
+    search_group.add_argument("-k", "--keyword", type=str, help="Search for movies by keyword!")
+    search_group.add_argument("-p", "--person", type=str, help="Search for movies by person!")
+
+    # Processing options
     parser.add_argument("-l", "--limit", type=int, default=DEFAULT_MOVIE_LIMIT, help="Limit the number of movies to search for!")
-    parser.add_argument("-b", "--bypass", action="store_true", help="Bypass all input prompts and default to 'yes'")
-    parser.add_argument("-c", "--cleanup", action="store_true", help="Cleanup libraries!")
-    parser.add_argument("-t", "--test", action="store_true", help="Test proxies!")
     parser.add_argument("-w", "--workers", type=int, default=DEFAULT_WORKERS, help="Number of workers to use for processing!")
+    
+    # Action flags
+    parser.add_argument("-b", "--bypass", action="store_true", help="Bypass all input prompts and default to 'yes'!")
+
+    # Maintenance
+    parser.add_argument("-c", "--cleanup", action="store_true", help="Cleanup libraries!")
+    parser.add_argument("-t", "--test", action="store_true", help="Test proxy connections!")
     return parser.parse_args()
 
 def handle_proxy_test() -> None:
@@ -386,6 +375,7 @@ def handle_proxy_test() -> None:
 
 def get_movies_from_args(args: argparse.Namespace) -> Tuple[Optional[List[Dict[str, Any]]], Optional[str]]:
     """Get movies based on command line arguments."""
+
     try:
         if args.person:
             return get_movies_by_person_search(args.person, args.limit)
@@ -445,6 +435,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 

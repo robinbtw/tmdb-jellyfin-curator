@@ -4,3 +4,5 @@ python-dotenv>=1.0.0
 urllib3>=2.1.0
 certifi>=2023.11.17
 beautifulsoup4>=4.10.0
+concurrent-log-handler>=0.9.24
+typing-extensions>=4.9.0
