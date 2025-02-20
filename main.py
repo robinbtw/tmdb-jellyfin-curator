@@ -1,12 +1,11 @@
 """
-Movie automation script for TMDB, Real-Debrid, and Jellyfin integration.
-
-This script allows you to search for movies by keyword or person on TMDB,
-process them using torrent sites, add them to Real-Debrid, and organize
-them in Jellyfin collections.
-
 Author: robinbtw
 Date: 02-17-2025
+
+Description:
+Movie automation script for TMDB, Real-Debrid, and Jellyfin integration.
+This script allows users to search for movies by keyword or person,
+process them through Real-Debrid, and manage collections in Jellyfin.
 """
 
 # Standard library imports
@@ -161,6 +160,27 @@ def search_for_a_person(person: str) -> Tuple[Optional[int], Optional[str]]:
     top = sorted(people_with_counts, key=lambda x: x[1], reverse=True)
     return top[0][0].get("id"), top[0][0].get("name")
 
+def search_movie_torrents(movie: Dict[str, Any]) -> Tuple[List[Any], str]:
+    """Search for movie torrents across all configured sites."""
+    title = movie.get("title")
+    release_date = movie.get("release_date", "")[:4]
+    search_term = f"{title} {release_date}"
+
+    # Check if movie already exists in Jellyfin
+    if g_jellyfin.get_movie(title):
+        print(f"• Skipping {title} ({release_date}): already in jellyfin!")
+        return title, []
+
+    print(f"• Searching for {title} ({release_date})...")
+    torrents = g_torrent.search_all_sites(search_term)
+
+    if not torrents:
+        print(f"✗ No torrents found for {title}!")
+        return title, []
+
+    print(f"✓ Found {len(torrents)} torrents for {title}!")
+    return title, torrents
+
 def get_movies_by_person(id: int, limit: int = 50) -> List[Dict[str, Any]]:
     """Get movies by person ID from TMDB."""
     response = g_tmdb.get_movie_credits(id)
@@ -191,39 +211,51 @@ def get_movies_by_keyword(id: int, limit: int) -> List[Dict[str, Any]]:
     return sorted(results[:limit], key=lambda x: x.get('popularity', 0),  reverse=True)
 
 # Processing functions
-def process_movie(movie: Dict[str, Any]) -> bool:
-    """Process a movie by adding it to Real-Debrid."""
-    title = movie.get("title")
-    release_date = movie.get("release_date", "")[:4]
-    search_term = f"{title} {release_date}"
-
-    # Check if movie already exists in Jellyfin
-    if g_jellyfin.get_movie(title):
-        print(f"• Skipping {title} ({release_date}): already in jellyfin!")
-        return True
-
-    print(f"• Processing {title} ({release_date})...")
-    torrents = g_torrent.search_all_sites(search_term)
-
+def process_movie_torrents(title: str, torrents: List[Any]) -> bool:
+    """Process movie torrents by adding them to Real-Debrid."""
     if not torrents:
-        print(f"✗ Failed to process {title}: no torrents found!")
         return False
 
     for torrent in torrents:
         result, id = g_debrid.add_magnet_to_debrid(torrent.magnet)
         if result:
             g_debrid.start_magnet_in_debrid(id)
-            print(f"✓ Added {title} ({release_date}) to debrid!")
+            print(f"✓ Added {title} to debrid!")
             return True
     
     return False
 
 def process_movies_parallel(movies: List[Dict[str, Any]], workers: int) -> int:
     """Process multiple movies in parallel using ThreadPoolExecutor."""
+    
+    torrent_results = {}
+    print(f"Searching for torrents for {len(movies)} movies...")
+
+    # First search for torrents in parallel
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        future_to_movie = {
+            executor.submit(search_movie_torrents, movie): movie 
+            for movie in movies
+        }
+        
+        for future in concurrent.futures.as_completed(future_to_movie):
+            title, torrents = future.result()
+            if torrents:
+                torrent_results[title] = torrents
+
+    # Then process Real-Debrid operations sequentially
+    successful = 0
     with ThreadPoolExecutor(max_workers=min(MAX_REAL_DEBRID_WORKERS, workers)) as executor:
-        futures = [executor.submit(process_movie, movie) for movie in movies]
-        concurrent.futures.wait(futures)
-        return sum(1 for future in futures if future.result())
+        future_to_title = {
+            executor.submit(process_movie_torrents, title, torrents): title 
+            for title, torrents in torrent_results.items()
+        }
+        
+        for future in concurrent.futures.as_completed(future_to_title):
+            if future.result():
+                successful += 1
+
+    return successful
 
 def process_collection_creation(movies: List[Dict[str, Any]], collection_name: str, workers: int) -> Optional[str]:
     """Create a Jellyfin collection and add movies to it."""

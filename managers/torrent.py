@@ -11,6 +11,7 @@ It includes classes to represent search results, and a manager class to search a
 # Import standard libraries
 import re
 import os
+import unicodedata
 import requests
 from dotenv import load_dotenv
 from bs4 import BeautifulSoup
@@ -37,9 +38,10 @@ class TorrentManager:
 
     def __init__(self):
         """Initializes the TorrentManager."""
-        self.nyaa_url = "https://nyaa.si/?f=0&c=1_0&q={}&s=seeders&o=desc" 
         self.x1337_url = "https://1337x.to/search/{}/1/"
         self.yts_url = "https://yts.mx/api/v2/list_movies.json?query_term={}"
+        self.lime_url = "https://limetorrent.net/search.php?catname=&q={}&orderby=DESC&order=seeders"
+        self.tpb_url = "https://tpb.party/search/{}/1/99/0"
         self.headers = {'User-Agent': 'Mozilla/5.0'}
         self.quality = os.getenv('MOVIE_QUALITY') or "1080p"
         self.proxy_manager = ProxyManager()
@@ -64,65 +66,56 @@ class TorrentManager:
             return magnet_link['href'] if magnet_link else None   
         return None
     
-    def search_nyaa(self, query, limit=3):
-        """Searches Nyaa.si for torrents."""
-        html = self._make_request('GET', self.nyaa_url.format(query))
-        return self._parse_nyaa_results(html, query, limit) if html else []
+    def search_tpb(self, query, limit=3):
+        """Searches The Pirate Bay for torrents."""
+        html = self._make_request('GET', self.tpb_url.format(query))
+        return self._parse_tpb_results(html, limit) if html else []
 
-    def _parse_nyaa_results(self, html, query, limit):
-        """Parses Nyaa.si search results from HTML."""
-        name = query.replace('+', ' ')
-
+    def _parse_tpb_results(self, html, limit):
+        """Parses The Pirate Bay search results from HTML."""
         results = []
         soup = BeautifulSoup(html, 'html.parser')
-        table = soup.find('table', {'class': 'torrent-list'})
+        table = soup.find('table', {'id': 'searchResult'})
         if not table:
             return None
-
-        potential_torrents = []
-        # Skip header row and limit to 10 results
-        for row in table.find_all('tr')[:10]:  
-            try:
-                # Find all links in the second column (td[1])
-                links = row.find_all('td')[1].find_all('a')
-
-                # Get the first link that is not a comment link
-                for link in links:
-                    if not link.has_attr('class') or 'comments' not in link.get('class', []):
-                        break
         
-                seeders = int(row.find_all('td')[5].text)      
-                name_lower = link.text.lower();
+        # Find all rows in the search results table
+        for row in table.find_all('tr')[1:8]:
+            try:
+                cells = row.find_all('td')
+                if len(cells) < 6:  # Make sure we have enough cells
+                    continue
+                    
+                # Name is in the 2nd td's first anchor tag
+                name = cells[1].find('a').text.strip()
+                name_lower = name.lower()
+                
+                # Magnet link is in the 4th td
+                magnet = cells[3].find('a', href=re.compile(r'^magnet:'))
+                if not magnet:
+                    continue
+                                    
+                # Seeders is in the 6th td
+                seeders = int(cells[5].text.strip())
 
-                # Check for 1080p or bluray, and exclude samples, telesync, and cam
-                if (seeders >= 5 and self.quality in name_lower and
-                    "sample" not in name_lower and "hdts" not in name_lower and
-                    "telesync" not in name_lower and "cam" not in name_lower):
-
-                    torrent_href = "https://nyaa.si" + row.find_all('td')[1].find('a')['href']
-                    potential_torrents.append((seeders, torrent_href, name))
-            except (IndexError, ValueError):
-                continue
-
-        if potential_torrents:
-            # Sort by seeders and take our limit
-            # print(f"✓ Found {len(potential_torrents)} torrents on Nyaa!")
-            top_torrents = sorted(potential_torrents, key=lambda x: x[0], reverse=True)[:limit]
-            for torrent in top_torrents:
-                magnet = self._get_magnet_link(torrent[1])
-                if magnet:
+                if (seeders >= 5 and 
+                    self.quality in name_lower and 
+                    "sample" not in name_lower and 
+                    "hdts" not in name_lower and
+                    "telesync" not in name_lower and 
+                    "cam" not in name_lower):
+                    
                     results.append(TorrentResult(
-                        title=torrent[2],
-                        seeders=torrent[0],
-                        magnet=magnet,
-                        source="Nyaa"
+                        title=name,
+                        seeders=seeders,
+                        magnet=magnet['href'],
+                        source="TPB"
                     ))
-
-        if results:
-            return results
-        else:
-            # print("✗ No torrents found on Nyaa")
-            return None
+                    
+            except (AttributeError, IndexError, ValueError) as e:
+                continue
+                    
+        return results[:limit] if results else None
 
     def search_1337x(self, query, limit=3):
         """Searches 1337x.to for torrents."""
@@ -156,7 +149,6 @@ class TorrentManager:
         # Sort by seeders and take our limit
         if potential_torrents:
             top_torrents = sorted(potential_torrents, key=lambda x: x[0], reverse=True)[:limit]
-            # print(f"✓ Found {len(top_torrents)} torrents on 1337x!")
             for torrent in top_torrents:
                 magnet = self._get_magnet_link(torrent[1])
                 if True:
@@ -233,16 +225,63 @@ class TorrentManager:
         else:
             # print("✗ No torrents found on YTS")
             return None
+    
+    def search_lime(self, query, limit=3):
+        """Searches LimeTorrents for torrents."""
+        html = self._make_request('GET', self.lime_url.format(query))
+        return self._parse_lime_results(html, limit) if html else []
+
+    def _parse_lime_results(self, html, limit):
+        results = []
+        soup = BeautifulSoup(html, 'html.parser')
+        
+        # Find the table containing search results
+        table = soup.find('table', class_='table2')
+        if not table:
+            return None
+            
+        for row in table.find_all('tr')[1:4]:
+            try:
+                cells = row.find_all('td')
+                if len(cells) < 4:
+                    continue
+                    
+                name_elem = cells[0].find('a', class_='csprite_dl14')
+                name = cells[0].find('div', class_='tt-name').text.strip().lower()
+                link = name_elem['href']
+                seeders = int(cells[3].text.strip())       
+                name_lower = name.lower()
+
+                if (seeders >= 5 and 
+                    self.quality in name_lower 
+                    and "sample" not in name_lower and "hdts" not in name_lower
+                    and "telesync" not in name_lower and "cam" not in name_lower):
+                    
+                    magnet = self._get_magnet_link(link)
+                    if magnet:
+                        results.append(TorrentResult(
+                            title=name,
+                            seeders=seeders,
+                            magnet=magnet,
+                            source="LimeTorrents"
+                        ))
+            except (AttributeError, IndexError, ValueError):
+                continue
+                
+        return results[:limit] if results else None
         
     def search_all_sites(self, query):
         """Searches all configured torrent sites and returns a sorted list of results."""
-        # Clean query: remove special characters except '+', convert to lowercase
-        result = re.sub(r'[^a-zA-Z0-9\s+]', '', query)
+        # Normalize accented characters and clean query
+        result = unicodedata.normalize('NFKD', query).encode('ASCII', 'ignore').decode('utf-8')
+        result = re.sub(r'[^a-zA-Z0-9\s+]', '', result)
         result = result.replace(' ', '+')
 
         torrent_results = []
-        for site in [self.search_1337x, self.search_yts]:
-            # print(f"Searching on {site.__name__.split('_')[1]}...")
+        for site in [self.search_1337x, self.search_lime, self.search_yts, self.search_tpb]:
+            if site == self.search_tpb:
+                result = result.replace('+', '%20')
+
             site_results = site(result)
             if site_results:
                 torrent_results.extend(site_results)

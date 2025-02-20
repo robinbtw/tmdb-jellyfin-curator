@@ -58,7 +58,8 @@ class JellyfinManager:
         """Retrieves all movies from Jellyfin."""
         params = {
             'recursive': 'true',
-            'includeItemTypes': 'Movie'
+            'includeItemTypes': 'Movie',
+            'parentId': f'{self.jellyfin_movie_library_id}'
         }
         return self._make_request('GET', "/Items", params=params)
     
@@ -94,9 +95,9 @@ class JellyfinManager:
 
     def get_movie(self, movie_name):
         """Retrieves item ID for a movie by name from the Jellyfin movies library."""
-        params = {'includeItemTypes': 'Movie', 'recursive': 'true', 'searchTerm': movie_name}
-        response = self._make_request('GET', "/Items", params=params)
-        
+
+        params = {'includeItemTypes': 'Movie', 'recursive': 'true', 'searchTerm': movie_name}    
+        response = self._make_request('GET', "/Items", params=params)        
         if response:
             items = response.get("Items", [])
             if items:
