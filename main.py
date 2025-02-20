@@ -339,6 +339,7 @@ def delete_debrid_torrent(movie: Dict[str, Any]) -> bool:
         print(f"✓ Deleted {name} from real-debrid!")
     return True
 
+# TODO: Improve this
 def handle_cleanup(workers: int) -> None:
     """Clean up duplicate movies and torrents."""
     print("Cleaning up libraries...")

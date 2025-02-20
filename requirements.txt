@@ -1,8 +1,8 @@
 requests>=2.31.0
-aiohttp>=3.9.1
-python-dotenv>=1.0.0
-urllib3>=2.1.0
-certifi>=2023.11.17
-beautifulsoup4>=4.10.0
-concurrent-log-handler>=0.9.24
+aiohttp>=3.9.3
+python-dotenv>=1.0.1
+urllib3>=2.2.1
+certifi>=2024.2.2
+beautifulsoup4>=4.12.3
+concurrent-log-handler>=0.9.25
 typing-extensions>=4.9.0
