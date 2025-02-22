@@ -1,6 +1,6 @@
 """
-Filename: jelyfin.py
-Date: 02-17-2025
+Filename: jellyfin.py
+Date: 02-21-2025
 Author: robinbtw
 
 Description:

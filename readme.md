@@ -37,7 +37,7 @@ The script does not handle any direct downloads or host any content. It simply h
 - [TMDB API key](https://www.themoviedb.org/settings/api)
 - Real-Debrid account (for torrent scraping)
 - [Jellyfin](https://github.com/jellyfin/jellyfin) server
-- [Tunarr](https://github.com/Double-A-92/Tunarr) server (optional)
+- [Tunarr](https://github.com/chrisbenincasa/tunarr) server (optional)
 - [Zurg](https://github.com/debrid-testing/zurg-testing) (highly recommended, this script is solely built around this)
 
 
