@@ -18,6 +18,7 @@ from bs4 import BeautifulSoup
 
 # Import custom libraries
 from managers.proxies import ProxyManager
+MOVIE_QUALITY = "1080p" # 720p, 1080p, 2160p
 
 # Load environment variables from .env file
 load_dotenv()
@@ -43,7 +44,7 @@ class TorrentManager:
         self.lime_url = "https://limetorrent.net/search.php?catname=&q={}&orderby=DESC&order=seeders"
         self.tpb_url = "https://tpb.party/search/{}/1/99/0"
         self.headers = {'User-Agent': 'Mozilla/5.0'}
-        self.quality = os.getenv('MOVIE_QUALITY') or "1080p"
+        self.quality = MOVIE_QUALITY
         self.proxy_manager = ProxyManager()
 
     def _make_request(self, method, url, is_json=False):

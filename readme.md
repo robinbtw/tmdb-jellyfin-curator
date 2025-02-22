@@ -1,55 +1,52 @@
-# Movie Collection Automation Suite
+# TMDB Jellyfin Curator
 
-[![Python](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Jellyfin](https://img.shields.io/badge/jellyfin-compatible-00A4DC)](https://jellyfin.org/)
-[![Real-Debrid](https://img.shields.io/badge/Real--Debrid-API-red)](https://real-debrid.com/)
-[![TMDB](https://img.shields.io/badge/TMDB-API-01B4E4)](https://www.themoviedb.org/)
+A powerful automation tool that helps you curate and manage your movie collection by integrating TMDB, Real-Debrid, and Jellyfin. Perfect for movie enthusiasts who want to automate their media library management.
 
-A comprehensive automation tool for managing movie collections. Integrates TMDB for movie discovery, Real-Debrid for secure downloads, and Jellyfin for media organization. Features automated metadata management, smart collection creation, and 24/7 channel programming through Tunarr.
+## ⚠️ Important Disclaimer
 
-## 🌟 Key Features
+This script is **NOT** a movie downloader or a tool for piracy. It is designed to:
+- Bridge the gap between Real-Debrid's cloud streaming service and your Jellyfin media server
+- Automate the organization and curation of your legal media collection
+- Manage metadata and collections through TMDB's API
 
-### Movie Discovery & Management
-- Search movies by keywords, cast members, or discover random suggestions
-- Smart metadata verification and auto-updates
-- Automated quality-based media selection (720p/1080p/2160p)
-- Multi-threaded processing for efficient operations
+The script does not handle any direct downloads or host any content. It simply helps manage and organize content between Real-Debrid's cloud streaming service and your personal Jellyfin server. Users are responsible for ensuring they comply with their local laws and regulations regarding media consumption and streaming services.
 
-### Collection Organization
-- Automatic collection creation and management in Jellyfin
-- Smart duplicate detection and cleanup
-- Library integrity verification
-- Automated metadata updates for incomplete entries
+## 🚀 Features
 
-### Tunarr Integration
-- Create 24/7 movie channels automatically
-- Smart programming based on collections
-- Automatic channel number normalization
-- Support for filmography-based channels
+- **Smart Movie Search**
+  - Find movies by keywords, genres, or themes
+  - Search by cast or crew members
+  - Automatic popularity-based sorting
+  - Smart duplicate detection
 
-### Real-Debrid Features
-- Secure torrent handling through Real-Debrid
-- Smart caching system to avoid duplicates
-- Quality-based selection with seeder verification
-- Multi-site search support (1337x, YTS)
+- **Service Integration**
+  - TMDB for accurate movie metadata
+  - Real-Debrid for content management
+  - Jellyfin for media organization
+  - Tunarr for custom channel creation
+
+- **Zurg & Real-Debrid Integration**
+  - Zurg mounts Real-Debrid as a virtual drive on your system
+  - This allows streaming content directly from Real-Debrid's servers
+  - Nothing is downloaded locally.
+
 
 ## 📋 Prerequisites
 
-- Python 3.9 or higher
-- Jellyfin server (Plex/Emby not supported)
-- Real-Debrid premium account
-- TMDB API access
-- [Zurg](https://github.com/debridmediamanager/zurg-testing) for Real-Debrid integration
-- [Rclone](https://rclone.org) for cloud storage mounting
-- [Tunarr](https://github.com/arabcoders/tunarr) for channel management
+- Python 3.x
+- [TMDB API key](https://www.themoviedb.org/settings/api)
+- Real-Debrid account (for torrent scraping)
+- [Jellyfin](https://github.com/jellyfin/jellyfin) server
+- [Tunarr](https://github.com/Double-A-92/Tunarr) server (optional)
+- [Zurg](https://github.com/debrid-testing/zurg-testing) (highly recommended, this script is solely built around this)
 
-## 🚀 Quick Start
+
+## 🛠️ Installation
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/robinbtw/tmdb-automation.git
-cd tmdb-automation
+git clone https://github.com/robinbtw/tmdb-jellyfin-curator.git
+cd tmdb-jellyfin-curator
 ```
 
 2. Install dependencies:
@@ -57,118 +54,131 @@ cd tmdb-automation
 pip install -r requirements.txt
 ```
 
-3. Configure your environment:
-Create a `.env` file with your settings:
+3. Create a `.env` file in the project root:
 ```env
-# Media Quality
-MOVIE_QUALITY=1080p 
-
-# Jellyfin Settings
-JELLYFIN_SERVER=http://localhost:8096
-JELLYFIN_API_KEY=your-jellyfin-api-key
-
-# TMDB Settings
-TMDB_API_KEY=your-tmdb-api-key
-TMDB_API_URL=https://api.themoviedb.org/3
-
-# Real-Debrid Settings
-REAL_DEBRID_API_URL=https://api.real-debrid.com/rest/1.0
-REAL_DEBRID_API_KEY=your-real-debrid-api-key
-
-# Tunarr Settings
-TUNARR_SERVER=http://localhost:8000
-TUNARR_TRANSCODE_CONFIG_ID=your-tunarr-config-id
+TMDB_API_KEY=your_tmdb_api_key
+REAL_DEBRID_API_KEY=your_rd_api_key
+JELLYFIN_URL=http://your.jellyfin.server:8096
+JELLYFIN_API_KEY=your_jellyfin_api_key
+TUNARR_URL=http://your.tunarr.server:port
+TUNARR_API_KEY=your_tunarr_api_key
 ```
 
-## 💻 Usage
+## 📖 Usage Examples
 
-### Basic Commands
+### 1. Movie Collection by Actor
+
+Create a Tom Hanks collection:
 ```bash
-# Search by keyword
-python main.py -k "dark fantasy" -l 20 -w 4
+python main.py -p "Tom Hanks" -l 30
+```
+This will:
+- Find Tom Hanks' most popular movies
+- Add them to Real-Debrid
+- Create a "Tom Hanks" collection in Jellyfin
+- Create a "Tom Hanks Filmography" channel in Tunarr
 
-# Search by person
-python main.py -p "tom cruise" -l 30 -w 6
+### 2. Genre-based Collection
 
-# Get random suggestions
-python main.py -r -l 15
+Create a horror movie collection:
+```bash
+python main.py -k "horror" -l 20 -b
+```
+This automatically:
+- Finds top horror movies
+- Processes them through Real-Debrid
+- Creates a "Horror" collection
+- Sets up a themed channel
 
-# Verify media integrity
-python main.py -v
+### 3. Theme-based Collections
 
-# Clean up duplicates
-python main.py -c
+```bash
+# Superhero movies
+python main.py -k "superhero" -l 25
 
-# Test connectivity
-python main.py -t
+# Time travel films
+python main.py -k "time travel" -l 25
+
+# Movies based on books
+python main.py -k "based on novel" -l 25
 ```
 
-### Command Arguments
-- `-k, --keyword`: Search using keywords
-- `-p, --person`: Search by actor/director/writer
-- `-r, --random`: Get random movie suggestions
-- `-l, --limit`: Set maximum results (default: 30)
-- `-w, --workers`: Set parallel workers (default: 1)
-- `-c, --cleanup`: Remove duplicates
-- `-t, --test`: Test proxy connections
-- `-b, --bypass`: Skip confirmation prompts
+### 4. Smart Library Management
 
-### Example Workflows
-
-#### Create an Actor Collection
+Clean up your library:
 ```bash
-# Create Tom Cruise collection with 40 movies
-python main.py -p "tom cruise" -l 40 -w 4 -b
-```
-
-#### Build a Genre Channel
-```bash
-# Create horror movie channel with 100 movies
-python main.py -k "horror" -l 100 -w 6 -b
-```
-
-#### Maintain Library
-```bash
-# Remove duplicates
 python main.py -c
 ```
+This will:
+- Remove duplicate movies from Jellyfin
+- Clean up duplicate torrents in Real-Debrid
+- Optimize your media storage
 
-## ⚙️ Best Practices
+### 5. Advanced Usage
 
-- Start with low worker counts (1-2) to avoid rate limits
-- Run `-c` periodically to clean up duplicates
-- Test connections with `-t` if experiencing issues
-- Keep Jellyfin libraries updated for best matching
-- When searching keywords, try to use more specific searches
-- Use quotes for multi-word searches
+Process multiple genres with custom worker count:
+```bash
+# Process action movies with 15 parallel workers
+python main.py -k "action" -w 15 -l 50
 
-## 🔍 Supported Search Categories
+# Process sci-fi movies and bypass all prompts
+python main.py -k "science fiction" -b -l 40
+```
 
-### Genres
-- Horror, Comedy, Drama, Adventure
-- Fantasy, Mystery, Crime, Thriller
-- Romance, Animation, Documentary
-- Family, Western, History, Sport
+## 🎯 Available Search Keywords
 
-### Themes
-- Superhero, Time Travel, Space
-- Based on Books/Comics/Games
-- Disaster, Post-Apocalyptic
-- Heist, Spy, Crime, Mafia
-- Zombie, Vampire, Robot
-- Dystopian, Cyberpunk
+### Popular Genres
+```
+✦ horror      ✦ comedy     ✦ drama
+✦ adventure   ✦ fantasy    ✦ mystery
+✦ crime       ✦ thriller   ✦ romance
+✦ animation   ✦ family     ✦ western
+✦ documentary ✦ biography  ✦ sport and more...
+```
 
-## ⚠️ Rate Limiting
+### Interesting Themes
+```
+✦ antihero            ✦ female protagonist
+✦ superhero           ✦ disaster
+✦ based on novel      ✦ based on true story
+✦ time travel         ✦ space
+✦ alien invasion      ✦ zombie apocalypse
+✦ vampire             ✦ werewolf
+✦ dystopia            ✦ post-apocalyptic
+✦ heist              ✦ spy thriller and more...
+✦ mafia              
+```
 
-- TMDB: 30 requests/10 seconds
-- Real-Debrid: 1 request/2 seconds
-- Jellyfin: No strict limits
-- Tunarr: Local API, no limits
+## 🔧 Configuration Tips
 
-## 🛡️ Disclaimer
+### Optimizing Performance
 
-This tool is for educational purposes only. Users are responsible for compliance with local laws and service terms. The developers do not endorse or encourage unauthorized content access.
+1. Adjust worker count based on your system:
+```bash
+python main.py -k "action" -w 20 # for huge batches
+python main.py -k "action" -w 5 # for light work
+```
+
+2. Batch processing with bypass flag:
+```bash
+# Process multiple themes quickly
+python main.py -k "superhero" -b -l 40
+python main.py -k "time travel" -b -l 40
+python main.py -k "zombie" -b -l 40
+```
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please read our contributing guidelines before submitting pull requests.
+Contributions are welcome! Feel free to:
+- Submit bug reports
+- Suggest new features
+- Create pull requests
+
+## 🔍 Troubleshooting
+
+If you encounter issues:
+1. Check your API keys in `.env`
+2. Verify your service URLs are correct
+3. Test proxy connections: `python main.py -t`
+4. Check service status pages
+5. Review logs for detailed errors
