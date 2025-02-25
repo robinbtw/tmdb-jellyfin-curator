@@ -38,7 +38,7 @@ The script does not handle any direct downloads or host any content. It simply h
 - Real-Debrid account (for torrent scraping)
 - [Jellyfin](https://github.com/jellyfin/jellyfin) server
 - [Tunarr](https://github.com/chrisbenincasa/tunarr) server (optional)
-- [Zurg](https://github.com/debrid-testing/zurg-testing) (highly recommended, this script is solely built around this)
+- [Zurg](https://github.com/debridmediamanager/zurg-testing) (highly recommended, this script is solely built around this)
 
 
 ## 🛠️ Installation
@@ -56,12 +56,24 @@ pip install -r requirements.txt
 
 3. Create a `.env` file in the project root:
 ```env
-TMDB_API_KEY=your_tmdb_api_key
-REAL_DEBRID_API_KEY=your_rd_api_key
-JELLYFIN_URL=http://your.jellyfin.server:8096
-JELLYFIN_API_KEY=your_jellyfin_api_key
-TUNARR_URL=http://your.tunarr.server:port
-TUNARR_API_KEY=your_tunarr_api_key
+# Movie quality. Select one: 720p, 1080p, or 2160p
+MOVIE_QUALITY=1080p 
+
+# Jellyfin Configuration
+JELLYFIN_SERVER=http://localhost:8096
+JELLYFIN_API_KEY=your-jellyfin-api-key
+
+# TMDb Configuration
+TMDB_API_KEY=your-tmdb-api-key
+TMDB_API_URL=https://api.themoviedb.org/3
+
+# Real-Debrid Configuration
+REAL_DEBRID_API_URL=https://api.real-debrid.com/rest/1.0
+REAL_DEBRID_API_KEY=your-real-debrid-api-key
+
+# Tunarr Configuration
+TUNARR_SERVER=http://localhost:8000
+TUNARR_TRANSCODE_CONFIG_ID=your-tunarr-transocde-id
 ```
 
 ## 📖 Usage Examples
@@ -105,7 +117,7 @@ python main.py -k "based on novel" -l 25
 
 ### 4. Smart Library Management
 
-Clean up your library:
+Clean up your library (beta):
 ```bash
 python main.py -c
 ```
@@ -118,11 +130,11 @@ This will:
 
 Process multiple genres with custom worker count:
 ```bash
-# Process action movies with 15 parallel workers
-python main.py -k "action" -w 15 -l 50
+# Process psychological thriller movies with 15 parallel workers
+python main.py -k "psychological thriller" -w 15 -l 50
 
-# Process sci-fi movies and bypass all prompts
-python main.py -k "science fiction" -b -l 40
+# Process based on video game movies and bypass all prompts
+python main.py -k "based on video game" -b -l 40
 ```
 
 ## 🎯 Available Search Keywords
@@ -145,7 +157,7 @@ python main.py -k "science fiction" -b -l 40
 ✦ alien invasion      ✦ zombie apocalypse
 ✦ vampire             ✦ werewolf
 ✦ dystopia            ✦ post-apocalyptic
-✦ heist              ✦ spy thriller and more...
+✦ heist               ✦ spy thriller and more...
 ✦ mafia              
 ```
 
@@ -155,8 +167,8 @@ python main.py -k "science fiction" -b -l 40
 
 1. Adjust worker count based on your system:
 ```bash
-python main.py -k "action" -w 20 # for huge batches
-python main.py -k "action" -w 5 # for light work
+python main.py -k "suspenseful" -w 20 # for huge batches
+python main.py -k "suspenseful" -w 5 # for light work
 ```
 
 2. Batch processing with bypass flag:
@@ -164,7 +176,7 @@ python main.py -k "action" -w 5 # for light work
 # Process multiple themes quickly
 python main.py -k "superhero" -b -l 40
 python main.py -k "time travel" -b -l 40
-python main.py -k "zombie" -b -l 40
+python main.py -k "post-apocalyptic future" -b -l 40
 ```
 
 ## 🤝 Contributing
